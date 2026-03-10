@@ -2,7 +2,7 @@ const CACHE_NAME = 'KLAP DEGI USB';
 const urlsToCache = [
   '/',
   '/index.html',
-  '/g_usb.html',
+  '/g_usb2.html',
   '/manifest.json',
   '/service-worker.js',
   '/192.png',
@@ -54,5 +54,6 @@ self.addEventListener('activate', (event) => {
   );
 
 });
+
 
 
