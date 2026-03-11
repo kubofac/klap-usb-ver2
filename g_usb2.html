@@ -3,15 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>KLAP_DEGI_USB - V8.5.7</title>
+    <title>KLAP_DEGI_USB - V8.5.8</title>
     <style>
         :root { --hrc-red: #E4002B; --hrc-white: #ffffff; --bg-dark: #000000; --hrc-orange: #FFA500; }
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: var(--bg-dark); color: var(--hrc-white); font-family: 'Arial Black', sans-serif; overflow: hidden; }
         #dashboard { position: relative; display: flex; flex-direction: column; height: 100dvh; width: 100vw; }
-        #canvas { position: absolute; top: 0; left: 0; width: 100%; height: calc(100% - 60px); z-index: 1; }
         
-        /* UI全体の開始位置を110pxから160pxへ下げました */
-        .main-ui-container { position: absolute; right: 10px; top: 160px; bottom: 70px; display: flex; align-items: flex-start; gap: 40px; z-index: 20; }
+        /* 表示領域を増やすため、高さを調整 */
+        #canvas { position: absolute; top: 0; left: 0; width: 100%; height: calc(100% - 45px); z-index: 1; }
+        
+        .main-ui-container { position: absolute; right: 10px; top: 160px; bottom: 55px; display: flex; align-items: flex-start; gap: 40px; z-index: 20; }
         
         #info-overlay { display: flex; flex-direction: column; align-items: flex-end; text-align: right; gap: 5px; }
         #rpm_val { font-size: 12vh; font-weight: 900; line-height: 0.8; text-shadow: 3px 3px 12px #000; }
@@ -23,7 +24,6 @@
         #display { font-size: 3.5vh; color: #bbb; text-shadow: 1px 1px 6px #000; margin-top: 5px; }
 
         .right-panels { display: flex; flex-direction: row; gap: 15px; height: 100%; align-items: flex-start; }
-        
         #lap-panel { width: 160px; height: 100%; overflow: hidden; }
         #lap { height: 100%; overflow-y: auto; scrollbar-width: none; }
         .lap-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 18px; font-weight: 900; border: none !important; }
@@ -40,8 +40,9 @@
         #history-table td { padding: 12px 5px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.1); }
         #history-close { position: sticky; top: 0; background: var(--hrc-red); padding: 12px; text-align: center; font-weight: bold; cursor: pointer; margin-bottom: 10px; z-index: 10; border-radius: 4px; }
 
-        footer { height: 55px; display: flex; gap: 4px; padding: 4px; background: #000; border-top: 1px solid #333; z-index: 100; position: fixed; bottom: 0; left: 0; right: 0; }
-        button { flex: 1; background: #1a1a1a; color: #fff; border: 1px solid #444; border-radius: 4px; font-size: 9px; font-weight: bold; cursor: pointer; }
+        /* フッターの高さを 55px -> 40px に短縮 */
+        footer { height: 40px; display: flex; gap: 3px; padding: 3px; background: #000; border-top: 1px solid #333; z-index: 100; position: fixed; bottom: 0; left: 0; right: 0; }
+        button { flex: 1; background: #1a1a1a; color: #fff; border: 1px solid #444; border-radius: 4px; font-size: 8px; font-weight: bold; cursor: pointer; padding: 2px; }
         button.active { background: var(--hrc-red) !important; color: #fff !important; }
         button.waiting { background: var(--hrc-orange) !important; color: #000 !important; }
         #saveLogBtn { background: #28a745; display: none; }
@@ -105,6 +106,7 @@ let trackLogs = [], currentLapLog = [];
 
 const canvas = document.getElementById('canvas'), ctx = canvas.getContext('2d');
 
+// --- (ロジック部分はV8.5.3を維持) ---
 function getIntersection(p1, p2, targetLine) {
     if (!targetLine.p1 || !targetLine.p2) return null;
     const x1 = p1.lon, y1 = p1.lat, x2 = p2.lon, y2 = p2.lat;
@@ -180,27 +182,22 @@ function processLap(exactTime, useFreeze) {
     const lapTime = exactTime - (lapStartTime || startTime);
     if (useFreeze && lapTime <= 5000) return; 
     if (!useFreeze && lapTime <= 500) return; 
-
     if (lapStartTime > 0) {
         const record = { time: lapTime, max: maxSpeedInLap, s1: getV('s1_val'), s2: getV('s2_val'), s3: getV('s3_val') };
         lapRecords.unshift(record);
         trackLogs.push([...currentLapLog]);
         if (lapTime < sessionBest) sessionBest = lapTime;
     }
-    
     currentLapLog = [];
     lapStartTime = exactTime; lastLapTime = exactTime; maxSpeedInLap = 0;
     ['s1_val', 's2_val', 's3_val'].forEach(id => document.getElementById(id).textContent = "--.--");
-    
     if (lines.s1.p1) nextExpectedSector = 's1';
     else if (lines.s2.p1) nextExpectedSector = 's2';
     else if (lines.s3.p1) nextExpectedSector = 's3';
     else nextExpectedSector = 'finish';
-
     updateLapDisplay();
     if (useFreeze && lapStartTime > 0) { isFrozen = true; freezeDisplayTime = timeFormat(lapTime); freezeStartTime = Date.now(); }
     else { isFrozen = false; }
-    
     if (window.navigator.vibrate) window.navigator.vibrate([100, 50, 100]);
 }
 
@@ -282,16 +279,13 @@ document.getElementById('startBtn').onclick = function() {
     if (swState !== 1) {
         swState = 1; startTime = Date.now(); lapStartTime = 0; lastLapTime = 0;
         this.className = 'active'; document.getElementById('saveLogBtn').style.display = 'none';
-        nextExpectedSector = 'finish';
-        tick();
+        nextExpectedSector = 'finish'; tick();
     } else { swState = 2; this.className = ''; document.getElementById('saveLogBtn').style.display = 'block'; }
 };
 
 document.getElementById('lapBtn').onclick = () => {
     const now = Date.now();
-    if(swState === 1) {
-        processLap(now, false);
-    } else {
+    if(swState === 1) { processLap(now, false); } else {
         swState = 0; lapRecords = []; trackLogs = []; currentLapLog = []; detectedDirection = null; sessionBest = Infinity; maxSpeedInLap = 0; isFrozen = false; lapStartTime = 0;
         document.getElementById('lap').innerHTML = ""; document.getElementById('display1').textContent = "00:00.000"; document.getElementById('display').textContent = "TOTAL 00:00.000"; document.getElementById('max_speed_val').textContent = "0";
         ['s1_val', 's2_val', 's3_val'].forEach(id => { if(document.getElementById(id)) document.getElementById(id).textContent = "--.--"; });
@@ -328,7 +322,7 @@ setInterval(() => {
     document.getElementById('btConnect').className = (now - lastBleDataTime < 1500) ? 'active' : (bleWaiting ? 'waiting' : '');
 }, 1000);
 
-window.onresize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight - 60; };
+window.onresize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight - 45; };
 window.onload = () => {
     window.dispatchEvent(new Event('resize'));
     const loadLine = (key) => {
