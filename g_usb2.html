@@ -3,14 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>KLAP_DEGI_USB - V8.5.3</title>
+    <title>KLAP_DEGI_USB - V8.5.7</title>
     <style>
         :root { --hrc-red: #E4002B; --hrc-white: #ffffff; --bg-dark: #000000; --hrc-orange: #FFA500; }
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: var(--bg-dark); color: var(--hrc-white); font-family: 'Arial Black', sans-serif; overflow: hidden; }
         #dashboard { position: relative; display: flex; flex-direction: column; height: 100dvh; width: 100vw; }
         #canvas { position: absolute; top: 0; left: 0; width: 100%; height: calc(100% - 60px); z-index: 1; }
         
-        .main-ui-container { position: absolute; right: 10px; top: 110px; bottom: 70px; display: flex; align-items: flex-start; gap: 40px; z-index: 20; }
+        /* UI全体の開始位置を110pxから160pxへ下げました */
+        .main-ui-container { position: absolute; right: 10px; top: 160px; bottom: 70px; display: flex; align-items: flex-start; gap: 40px; z-index: 20; }
+        
         #info-overlay { display: flex; flex-direction: column; align-items: flex-end; text-align: right; gap: 5px; }
         #rpm_val { font-size: 12vh; font-weight: 900; line-height: 0.8; text-shadow: 3px 3px 12px #000; }
         #display1 { font-size: 16vh; font-weight: 900; line-height: 0.9; color: var(--hrc-white); text-shadow: 4px 4px 15px #000; }
@@ -22,7 +24,6 @@
 
         .right-panels { display: flex; flex-direction: row; gap: 15px; height: 100%; align-items: flex-start; }
         
-        /* ラップ履歴：枠線を完全に排除 */
         #lap-panel { width: 160px; height: 100%; overflow: hidden; }
         #lap { height: 100%; overflow-y: auto; scrollbar-width: none; }
         .lap-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 18px; font-weight: 900; border: none !important; }
@@ -33,7 +34,6 @@
         .label { font-size: 10px; color: var(--hrc-red); font-weight: bold; }
         .val { font-size: 36px; font-weight: 900; line-height: 0.9; }
 
-        /* 履歴ページ：枠線を最小限に */
         #history-page { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.98); z-index: 2000; padding: 20px; box-sizing: border-box; overflow-y: auto; }
         #history-table { width: 100%; border-collapse: collapse; font-size: 16px; border: none; }
         #history-table th { color: var(--hrc-red); font-size: 11px; padding: 10px 5px; border-bottom: 2px solid var(--hrc-red); }
@@ -143,7 +143,6 @@ function parseNMEA(line) {
         if (swState === 1) {
             currentLapLog.push(cur);
             if (lastPos) {
-                // セクター判定 (順序制御)
                 if (nextExpectedSector !== 'finish' && lapStartTime > 0) {
                     const s = nextExpectedSector;
                     const hit = getIntersection(lastPos, cur, lines[s]);
@@ -155,7 +154,6 @@ function parseNMEA(line) {
                         }
                     }
                 }
-                // スタートライン判定
                 const hitStart = getIntersection(lastPos, cur, lines.start);
                 if (hitStart) {
                     if (detectedDirection === null) detectedDirection = hitStart.dir;
@@ -183,7 +181,6 @@ function processLap(exactTime, useFreeze) {
     if (useFreeze && lapTime <= 5000) return; 
     if (!useFreeze && lapTime <= 500) return; 
 
-    // 初回スタートライン通過時は記録せず、計測開始のみ行う
     if (lapStartTime > 0) {
         const record = { time: lapTime, max: maxSpeedInLap, s1: getV('s1_val'), s2: getV('s2_val'), s3: getV('s3_val') };
         lapRecords.unshift(record);
@@ -222,7 +219,6 @@ function updateLapDisplay() {
 function tick() { 
     if (swState !== 1) return;
     const now = Date.now();
-    // 予測ロジック
     if (lastPos && !isFrozen && nextExpectedSector === 'finish' && lastSpeedMs > 2 && lapStartTime > 0) {
         const dist = getDistanceToLine(lastPos, lines.start);
         const timeToReach = (dist / lastSpeedMs) * 1000;
@@ -286,7 +282,7 @@ document.getElementById('startBtn').onclick = function() {
     if (swState !== 1) {
         swState = 1; startTime = Date.now(); lapStartTime = 0; lastLapTime = 0;
         this.className = 'active'; document.getElementById('saveLogBtn').style.display = 'none';
-        nextExpectedSector = 'finish'; // 最初はスタートラインを待つ
+        nextExpectedSector = 'finish';
         tick();
     } else { swState = 2; this.className = ''; document.getElementById('saveLogBtn').style.display = 'block'; }
 };
