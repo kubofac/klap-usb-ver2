@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>KLAP_DEGI_USB - V8.7.9</title>
+    <title>KLAP_DEGI_USB - V8.8.3</title>
     <style>
         :root { 
             --hrc-red: #E4002B; --hrc-blue: #004098; --hrc-white: #ffffff; 
@@ -54,13 +54,6 @@
         button { flex: 1; background: #1a1a1a; color: #fff; border: 1px solid #444; border-radius: 4px; font-size: 10px; font-weight: bold; cursor: pointer; }
         button.waiting { background: var(--hrc-orange) !important; color: #000 !important; }
         button.active { background: var(--hrc-red) !important; color: #fff !important; }
-
-        #history-page { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.96); z-index: 2000; padding: 20px; box-sizing: border-box; overflow-y: auto; }
-        #history-summary { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 20px; background: #111; padding: 15px; border-radius: 8px; text-align: center; }
-        #history-table { width: 100%; border-collapse: collapse; font-size: 16px; }
-        #history-table th { color: var(--hrc-red); border-bottom: 2px solid var(--hrc-red); padding: 10px; }
-        #history-table td { padding: 10px; border-bottom: 1px solid #333; text-align: center; }
-        #history-close { background: var(--hrc-red); padding: 15px; text-align: center; font-weight: bold; border-radius: 4px; margin-bottom: 15px; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -93,20 +86,22 @@
         <button id="startBtn">TIMER</button>
         <button id="lapBtn">LAP/RESET</button>
         <button id="historyBtn">HISTORY</button>
-        <button id="saveLogBtn" style="display:none; background:#28a745;">LOG SAVE</button>
+        <button id="mapBtn" onclick="location.href='index.html'">MAP</button> 
         <button id="reloadBtn">RELOAD</button>
     </footer>
 </div>
 
 <script>
+// ... (中略：ロジック部分はV8.8.2と同じ) ...
 'use strict';
 
 const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b", PULSE_UUID = "f4deb353-a4cf-4ffb-badb-2a5f2e3bb630";
 let swState = 0, startTime = 0, lapStartTime = 0, lapRecords = [];
 let currentRPM = 0, currentTemp = 0, device = null, nmeaBuffer = '', lastPos = null;
-let lines = { start: null, s1: null, s2: null, s3: null };
+let lines = { startLine: null, s1Line: null, s2Line: null, s3Line: null };
 let currentSpeedKmh = 0, maxSpeedInLap = 0, sessionBest = Infinity, sessionMaxSpeed = 0;
 let isFrozen = false, freezeDisplayTime = "", freezeUntil = 0;
+let pulsePerRev = 1, cooldownMs = 30000;
 
 const canvas = document.getElementById('canvas'), ctx = canvas.getContext('2d');
 
@@ -122,14 +117,15 @@ function parseNMEA(line) {
         if (line.includes('GGA') && swState === 1) {
             const cur = { lat: dmmToDec(p[2], p[3]), lon: dmmToDec(p[4], p[5]), time: Date.now() };
             if (lastPos) {
-                ['s1','s2','s3'].forEach(s => {
+                ['s1Line','s2Line','s3Line'].forEach(s => {
                     if (lines[s]) {
                         const hitS = getIntersection(lastPos, cur, lines[s]);
-                        if (hitS && lapStartTime > 0) document.getElementById(s+'_val').textContent = ((hitS - (lapStartTime || startTime))/1000).toFixed(2);
+                        const boxId = s.replace('Line', '') + '_val';
+                        if (hitS && lapStartTime > 0) document.getElementById(boxId).textContent = ((hitS - (lapStartTime || startTime))/1000).toFixed(2);
                     }
                 });
-                const hit = getIntersection(lastPos, cur, lines.start);
-                if (hit && (hit - (lapStartTime || startTime) > 2000)) processLap(hit, 15000);
+                const hit = getIntersection(lastPos, cur, lines.startLine);
+                if (hit && (hit - (lapStartTime || startTime) > cooldownMs)) processLap(hit, 15000);
             }
             lastPos = cur;
         }
@@ -156,26 +152,15 @@ document.getElementById('lapBtn').onclick = () => {
 };
 
 document.getElementById('startBtn').onclick = function() {
-    if (swState !== 1) { swState = 1; startTime = Date.now(); lapStartTime = 0; this.className = 'active'; document.getElementById('saveLogBtn').style.display = 'none'; tick(); }
-    else { swState = 2; this.className = ''; document.getElementById('saveLogBtn').style.display = 'block'; }
+    if (swState !== 1) { swState = 1; startTime = Date.now(); lapStartTime = 0; this.className = 'active'; tick(); }
+    else { swState = 2; this.className = ''; }
 };
-
-document.getElementById('historyBtn').onclick = () => {
-    const body = document.getElementById('history-body'); body.innerHTML = "";
-    document.getElementById('sum-best').textContent = sessionBest === Infinity ? "--:--" : timeFormat(sessionBest);
-    document.getElementById('sum-max').textContent = sessionMaxSpeed;
-    document.getElementById('sum-laps').textContent = lapRecords.length;
-    lapRecords.forEach((r, i) => { body.innerHTML += `<tr><td>${lapRecords.length-i}</td><td>${r.s1}</td><td>${r.s2}</td><td>${r.s3}</td><td style="font-weight:bold; color:${r.time===sessionBest?'var(--hrc-red)':'#fff'}">${timeFormat(r.time)}</td><td>${r.max}</td></tr>`; });
-    document.getElementById('history-page').style.display = 'block';
-};
-document.getElementById('history-close').onclick = () => document.getElementById('history-page').style.display = 'none';
 
 function tick() {
     if (swState !== 1) return;
     const now = Date.now();
     document.getElementById('display').textContent = "TOTAL " + timeFormat(now - startTime);
     const d1 = document.getElementById('display1');
-    // フリーズ中も文字色は白(var(--hrc-white))のまま
     if (isFrozen && now < freezeUntil) { d1.textContent = freezeDisplayTime; d1.style.color = "var(--hrc-white)"; }
     else { isFrozen = false; d1.textContent = timeFormat(now - (lapStartTime || startTime)); d1.style.color = "var(--hrc-white)"; }
     requestAnimationFrame(tick);
@@ -201,7 +186,7 @@ document.getElementById('usbGpsBtn').onclick = async function() {
     try {
         device = await navigator.usb.requestDevice({ filters: [] });
         await device.open(); await device.selectConfiguration(1); await device.claimInterface(1);
-        this.className = 'waiting';
+        this.className = 'active';
         while (device) { const res = await device.transferIn(2, 512); const linesN = (nmeaBuffer + new TextDecoder().decode(res.data)).split(/\r?\n/); nmeaBuffer = linesN.pop(); linesN.forEach(parseNMEA); }
     } catch (e) { this.className = ''; }
 };
@@ -213,8 +198,13 @@ document.getElementById('btConnect').onclick = async function() {
         const service = await server.getPrimaryService(SERVICE_UUID);
         const pC = await service.getCharacteristic(PULSE_UUID);
         await pC.startNotifications();
-        this.className = 'waiting';
-        pC.oncharacteristicvaluechanged = (e) => { this.className = 'active'; const data = e.target.value; currentRPM = (data.getUint16(0, true) * 60); currentTemp = data.getUint8(2); document.getElementById('temp_val').textContent = currentTemp; };
+        this.className = 'active';
+        pC.oncharacteristicvaluechanged = (e) => { 
+            const data = e.target.value; 
+            currentRPM = (data.getUint16(0, true) * 60) / pulsePerRev; 
+            currentTemp = data.getUint8(2); 
+            document.getElementById('temp_val').textContent = currentTemp; 
+        };
     } catch (e) { this.className = ''; }
 };
 
@@ -223,18 +213,29 @@ function dmmToDec(d, dir){ if(!d) return 0; const dot=d.indexOf('.'); const deg=
 function timeFormat(ms){ if(ms===Infinity||ms<0)return "--:--.---"; const m=Math.floor(ms/60000), s=Math.floor((ms%60000)/1000), mss=Math.floor(ms%1000); return `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}.${mss.toString().padStart(3,'0')}`; }
 
 window.onresize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight - 60; };
+
 window.onload = () => {
     window.dispatchEvent(new Event('resize'));
-    const isConfigComplete = localStorage.getItem('startLineP1Lat') && localStorage.getItem('gpsThreshold') && localStorage.getItem('coolDownTime');
-    const relBtn = document.getElementById('reloadBtn');
-    if (!isConfigComplete) relBtn.classList.add('waiting'); else relBtn.classList.remove('waiting');
-    ['start', 's1', 's2', 's3'].forEach(key => {
-        const lat = localStorage.getItem(key + 'LineP1Lat');
-        if (lat) {
-            lines[key] = { p1: { lat: parseFloat(lat), lon: parseFloat(localStorage.getItem(key + 'LineP1Lon')) }, p2: { lat: parseFloat(localStorage.getItem(key + 'LineP2Lat')), lon: parseFloat(localStorage.getItem(key + 'LineP2Lon')) } };
-            if (key !== 'start') document.getElementById(key + '_box').style.display = 'block';
+    pulsePerRev = parseFloat(localStorage.getItem('pl1')) || 1;
+    cooldownMs = parseInt(localStorage.getItem('cooldown')) || 30000;
+    
+    ['startLine', 's1Line', 's2Line', 's3Line'].forEach(key => {
+        const p1Lat = localStorage.getItem(key + 'P1Lat');
+        if (p1Lat) {
+            lines[key] = { 
+                p1: { lat: parseFloat(p1Lat), lon: parseFloat(localStorage.getItem(key + 'P1Lon')) }, 
+                p2: { lat: parseFloat(localStorage.getItem(key + 'P2Lat')), lon: parseFloat(localStorage.getItem(key + 'P2Lon')) } 
+            };
+            if (key !== 'startLine') {
+                const box = document.getElementById(key.replace('Line', '') + '_val');
+                if (box) box.parentElement.style.display = 'block';
+            }
         }
     });
+
+    const isReady = localStorage.getItem('startLineP1Lat') ? true : false;
+    document.getElementById('reloadBtn').className = isReady ? '' : 'waiting';
+
     (function anim(){ drawTacho(currentRPM); requestAnimationFrame(anim); })();
 };
 document.getElementById('reloadBtn').onclick = () => window.location.href = window.location.pathname;
