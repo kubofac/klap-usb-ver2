@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>KLAP_DEGI_USB - V8.7.8</title>
+    <title>KLAP_DEGI_USB - V8.7.9</title>
     <style>
         :root { 
             --hrc-red: #E4002B; --hrc-blue: #004098; --hrc-white: #ffffff; 
@@ -98,19 +98,6 @@
     </footer>
 </div>
 
-<div id="history-page">
-    <div id="history-close">CLOSE HISTORY</div>
-    <div id="history-summary">
-        <div><span style="font-size:11px;color:var(--hrc-red)">BEST</span><br><span id="sum-best" style="font-size:24px">--:--.---</span></div>
-        <div><span style="font-size:11px;color:var(--hrc-red)">MAX SPD</span><br><span id="sum-max" style="font-size:24px">0</span></div>
-        <div><span style="font-size:11px;color:var(--hrc-red)">LAPS</span><br><span id="sum-laps" style="font-size:24px">0</span></div>
-    </div>
-    <table id="history-table">
-        <thead><tr><th>LAP</th><th>S1</th><th>S2</th><th>S3</th><th>TIME</th><th>MAX</th></tr></thead>
-        <tbody id="history-body"></tbody>
-    </table>
-</div>
-
 <script>
 'use strict';
 
@@ -163,14 +150,9 @@ function processLap(t, freezeMs) {
     ['s1_val','s2_val','s3_val'].forEach(id => document.getElementById(id).textContent = "--.--");
 }
 
-// 改良リセット（アラート回避・オフライン対応）
 document.getElementById('lapBtn').onclick = () => {
-    if (swState === 1) {
-        processLap(Date.now(), 0);
-    } else {
-        // window.location.hrefの再設定で、通信警告をスキップしつつ戻る
-        window.location.href = window.location.pathname;
-    }
+    if (swState === 1) processLap(Date.now(), 0);
+    else window.location.href = window.location.pathname;
 };
 
 document.getElementById('startBtn').onclick = function() {
@@ -193,7 +175,8 @@ function tick() {
     const now = Date.now();
     document.getElementById('display').textContent = "TOTAL " + timeFormat(now - startTime);
     const d1 = document.getElementById('display1');
-    if (isFrozen && now < freezeUntil) { d1.textContent = freezeDisplayTime; d1.style.color = "var(--hrc-orange)"; }
+    // フリーズ中も文字色は白(var(--hrc-white))のまま
+    if (isFrozen && now < freezeUntil) { d1.textContent = freezeDisplayTime; d1.style.color = "var(--hrc-white)"; }
     else { isFrozen = false; d1.textContent = timeFormat(now - (lapStartTime || startTime)); d1.style.color = "var(--hrc-white)"; }
     requestAnimationFrame(tick);
 }
@@ -254,7 +237,6 @@ window.onload = () => {
     });
     (function anim(){ drawTacho(currentRPM); requestAnimationFrame(anim); })();
 };
-// RELOADボタンも警告回避仕様に
 document.getElementById('reloadBtn').onclick = () => window.location.href = window.location.pathname;
 </script>
 </body>
