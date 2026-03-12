@@ -3,57 +3,44 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>KLAP_DEGI_USB - V8.8.3</title>
+    <title>KLAP_DEGI_USB - V8.9.4</title>
     <style>
-        :root { 
-            --hrc-red: #E4002B; --hrc-blue: #004098; --hrc-white: #ffffff; 
-            --bg-dark: #000000; --hrc-orange: #FFA500;
-        }
-        body, html { 
-            margin: 0; padding: 0; width: 100%; height: 100%; 
-            background-color: var(--bg-dark); color: var(--hrc-white); 
-            font-family: 'Arial Black', sans-serif; overflow: hidden; 
-        }
+        :root { --hrc-red: #E4002B; --hrc-white: #ffffff; --bg-dark: #000000; --hrc-orange: #FFA500; }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: var(--bg-dark); color: var(--hrc-white); font-family: 'Arial Black', sans-serif; overflow: hidden; }
         #dashboard { position: relative; display: flex; flex-direction: column; height: 100dvh; width: 100vw; }
         #canvas { position: absolute; top: 0; left: 0; width: 100% !important; height: calc(100% - 60px) !important; z-index: 1; }
         
-        .main-ui-container {
-            position: absolute; right: 10px; top: 120px; bottom: 70px; 
-            display: flex; align-items: flex-start; gap: 45px; z-index: 20; pointer-events: auto;
-        }
+        /* UI Layout */
+        .main-ui-container { position: absolute; right: 10px; top: 120px; bottom: 70px; display: flex; align-items: flex-start; gap: 45px; z-index: 20; pointer-events: auto; }
         #info-overlay { display: flex; flex-direction: column; align-items: flex-end; text-align: right; gap: 10px; }
         #rpm_val { font-size: 13vh; font-weight: 900; line-height: 0.8; margin-top: 10px; text-shadow: 3px 3px 12px #000; }
         #display1 { font-size: 18vh; font-weight: 900; line-height: 0.9; color: var(--hrc-white); text-shadow: 4px 4px 15px #000; }
-        
         #sector-container { display: flex; justify-content: flex-end; gap: 15px; font-size: 3vh; font-weight: 900; height: 3.5vh; }
         .sec-box { display: none; text-shadow: 2px 2px 10px #000; color: #fff; }
-        .sec-box span { color: var(--hrc-orange); }
-
-        #display { font-size: 4vh; color: #bbb; text-shadow: 1px 1px 6px #000; }
-
+        
         .right-panels { display: flex; flex-direction: row; gap: 15px; height: 100%; align-items: flex-start; }
-        #lap-panel { 
-            width: 175px; height: 100%; display: flex; flex-direction: column; 
-            overflow: hidden; border-top: 1px solid rgba(255,255,255,0);
-        }
+        #lap-panel { width: 175px; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
         #lap { flex: 1; overflow-y: auto; scrollbar-width: none; }
-        #lap::-webkit-scrollbar { display: none; }
-        .lap-row { 
-            display: flex; justify-content: space-between; padding: 6px 0; 
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-            font-size: 18px; font-weight: 900; text-shadow: 2px 2px 4px #000;
-        }
-        .best-lap { color: var(--hrc-red); }
-
+        .lap-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 18px; font-weight: 900; }
         .data-panel { display: flex; flex-direction: column; gap: 15px; width: 110px; }
-        .data-box { display: flex; flex-direction: column; align-items: flex-end; }
-        .label { font-size: 11px; color: var(--hrc-red); font-weight: bold; }
         .val { font-size: 40px; font-weight: 900; line-height: 0.9; text-shadow: 2px 2px 8px #000; }
-
-        footer { height: 55px; display: flex; gap: 4px; padding: 4px; background: #000; border-top: 1px solid #333; z-index: 100; position: fixed; bottom: 0; left: 0; right: 0; }
-        button { flex: 1; background: #1a1a1a; color: #fff; border: 1px solid #444; border-radius: 4px; font-size: 10px; font-weight: bold; cursor: pointer; }
-        button.waiting { background: var(--hrc-orange) !important; color: #000 !important; }
+        .label { font-size: 11px; color: var(--hrc-red); font-weight: bold; }
+        
+        /* Footer Navigation */
+        footer { height: 55px; display: flex; gap: 2px; padding: 4px; background: #000; border-top: 1px solid #333; z-index: 100; position: fixed; bottom: 0; left: 0; right: 0; }
+        button { flex: 1; background: #1a1a1a; color: #fff; border: 1px solid #444; border-radius: 4px; font-size: 9px; font-weight: bold; min-width: 0; cursor: pointer; }
         button.active { background: var(--hrc-red) !important; color: #fff !important; }
+        
+        /* Conditional Styling */
+        #gpxBtn { display: none; background: var(--hrc-orange); color: #000; }
+        .config-missing { background: var(--hrc-orange) !important; color: #000 !important; }
+
+        /* History Overlay */
+        #history-page { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.96); z-index: 2000; padding: 20px; box-sizing: border-box; overflow-y: auto; }
+        #history-table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 20px; }
+        #history-table th { color: var(--hrc-red); border-bottom: 2px solid var(--hrc-red); padding: 8px; text-align: center; }
+        #history-table td { padding: 8px; border-bottom: 1px solid #333; text-align: center; }
+        .close-btn { background: var(--hrc-red); padding: 15px; text-align: center; font-weight: bold; border-radius: 4px; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -86,86 +73,146 @@
         <button id="startBtn">TIMER</button>
         <button id="lapBtn">LAP/RESET</button>
         <button id="historyBtn">HISTORY</button>
+        <button id="gpxBtn">GPX SAVE</button>
         <button id="mapBtn" onclick="location.href='index.html'">MAP</button> 
         <button id="reloadBtn">RELOAD</button>
     </footer>
 </div>
 
-<script>
-// ... (中略：ロジック部分はV8.8.2と同じ) ...
-'use strict';
+<div id="history-page">
+    <div class="close-btn" onclick="document.getElementById('history-page').style.display='none'">CLOSE HISTORY</div>
+    <table id="history-table">
+        <thead><tr><th>LAP</th><th>S1</th><th>S2</th><th>S3</th><th>TIME</th><th>MAX SPD</th><th>MAX RPM</th></tr></thead>
+        <tbody id="history-body"></tbody>
+    </table>
+</div>
 
+<script>
+'use strict';
 const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b", PULSE_UUID = "f4deb353-a4cf-4ffb-badb-2a5f2e3bb630";
-let swState = 0, startTime = 0, lapStartTime = 0, lapRecords = [];
+let swState = 0, startTime = 0, lapStartTime = 0, lapRecords = [], gpsPoints = [];
 let currentRPM = 0, currentTemp = 0, device = null, nmeaBuffer = '', lastPos = null;
 let lines = { startLine: null, s1Line: null, s2Line: null, s3Line: null };
-let currentSpeedKmh = 0, maxSpeedInLap = 0, sessionBest = Infinity, sessionMaxSpeed = 0;
+let currentSpeedKmh = 0, maxSpeedInLap = 0, maxRpmInLap = 0;
 let isFrozen = false, freezeDisplayTime = "", freezeUntil = 0;
-let pulsePerRev = 1, cooldownMs = 30000;
+let pulsePerRev = 1, cooldownMs = 30000, gpsThreshold = 0.0001;
 
 const canvas = document.getElementById('canvas'), ctx = canvas.getContext('2d');
 
+// --- GPS Parsing ---
 function parseNMEA(line) {
-    const p = line.split(',');
-    if ((line.includes('RMC') && p[2] === 'A') || (line.includes('GGA') && p[6] !== '0')) {
-        document.getElementById('usbGpsBtn').className = 'active';
-        if (line.includes('RMC')) {
+    if (line.includes('RMC') || line.includes('GGA')) {
+        document.getElementById('usbGpsBtn').classList.add('active');
+        const p = line.split(',');
+        if (line.includes('RMC') && p[2] === 'A') {
             currentSpeedKmh = parseFloat(p[7]) * 1.852;
             if (currentSpeedKmh > maxSpeedInLap) maxSpeedInLap = Math.round(currentSpeedKmh);
-            if (currentSpeedKmh > sessionMaxSpeed) sessionMaxSpeed = Math.round(currentSpeedKmh);
         }
-        if (line.includes('GGA') && swState === 1) {
-            const cur = { lat: dmmToDec(p[2], p[3]), lon: dmmToDec(p[4], p[5]), time: Date.now() };
-            if (lastPos) {
+        if (line.includes('GGA') && p[6] !== '0') {
+            const lat = dmmToDec(p[2], p[3]), lon = dmmToDec(p[4], p[5]);
+            const cur = { lat, lon, rpm: currentRPM, time: Date.now() };
+            if (swState === 1) gpsPoints.push(cur);
+            if (swState === 1 && lastPos) {
+                // 自動計測（GPSライン通過）
+                const hit = getIntersection(lastPos, cur, lines.startLine);
+                if (hit && (hit - (lapStartTime || startTime) > cooldownMs)) {
+                    processLap(hit, 15000); // 自動計測は15秒固定表示
+                }
+                
                 ['s1Line','s2Line','s3Line'].forEach(s => {
                     if (lines[s]) {
                         const hitS = getIntersection(lastPos, cur, lines[s]);
-                        const boxId = s.replace('Line', '') + '_val';
-                        if (hitS && lapStartTime > 0) document.getElementById(boxId).textContent = ((hitS - (lapStartTime || startTime))/1000).toFixed(2);
+                        if (hitS && lapStartTime > 0) document.getElementById(s.replace('Line', '') + '_val').textContent = ((hitS - lapStartTime)/1000).toFixed(2);
                     }
                 });
-                const hit = getIntersection(lastPos, cur, lines.startLine);
-                if (hit && (hit - (lapStartTime || startTime) > cooldownMs)) processLap(hit, 15000);
             }
             lastPos = cur;
         }
     }
 }
 
+// --- Logic ---
 function processLap(t, freezeMs) {
     const now = t || Date.now();
     const lapTime = now - (lapStartTime || startTime);
-    if (lapTime < 10) return;
-    const lapData = { time: lapTime, max: Math.round(maxSpeedInLap), s1: document.getElementById('s1_val').textContent, s2: document.getElementById('s2_val').textContent, s3: document.getElementById('s3_val').textContent };
+    const lapData = { 
+        no: lapRecords.length + 1, 
+        time: lapTime, 
+        max: Math.round(maxSpeedInLap), 
+        maxRpm: Math.round(maxRpmInLap), 
+        s1: document.getElementById('s1_val').textContent, 
+        s2: document.getElementById('s2_val').textContent, 
+        s3: document.getElementById('s3_val').textContent 
+    };
     lapRecords.unshift(lapData);
-    sessionBest = Math.min(...lapRecords.map(r => r.time));
-    const lapDiv = document.getElementById('lap'); lapDiv.innerHTML = "";
-    lapRecords.forEach((r, i) => { lapDiv.innerHTML += `<div class="lap-row ${r.time === sessionBest ? 'best-lap' : ''}"><span>L${lapRecords.length-i}</span><span>${timeFormat(r.time)}</span></div>`; });
-    if (freezeMs > 0) { isFrozen = true; freezeDisplayTime = timeFormat(lapTime); freezeUntil = Date.now() + freezeMs; } else { isFrozen = false; }
-    lapStartTime = now; maxSpeedInLap = 0;
+    document.getElementById('lap').innerHTML = lapRecords.map(r => `<div class="lap-row"><span>L${r.no}</span><span>${timeFormat(r.time)}</span></div>`).join('');
+    
+    // 表示固定処理
+    if (freezeMs > 0) { 
+        isFrozen = true; 
+        freezeDisplayTime = timeFormat(lapTime); 
+        freezeUntil = Date.now() + freezeMs; 
+    } else {
+        isFrozen = false; 
+    }
+    
+    lapStartTime = now; 
+    maxSpeedInLap = 0; 
+    maxRpmInLap = 0;
     ['s1_val','s2_val','s3_val'].forEach(id => document.getElementById(id).textContent = "--.--");
 }
 
-document.getElementById('lapBtn').onclick = () => {
-    if (swState === 1) processLap(Date.now(), 0);
-    else window.location.href = window.location.pathname;
+// --- UI Interaction ---
+document.getElementById('startBtn').onclick = function() {
+    const gpxBtn = document.getElementById('gpxBtn');
+    if (swState !== 1) { 
+        swState = 1; startTime = Date.now(); lapStartTime = 0; lapRecords = []; gpsPoints = []; maxRpmInLap = 0;
+        this.classList.add('active'); 
+        gpxBtn.style.display = 'none';
+        tick(); 
+    } else { 
+        swState = 2; 
+        this.classList.remove('active'); 
+        gpxBtn.style.display = 'block'; 
+    }
 };
 
-document.getElementById('startBtn').onclick = function() {
-    if (swState !== 1) { swState = 1; startTime = Date.now(); lapStartTime = 0; this.className = 'active'; tick(); }
-    else { swState = 2; this.className = ''; }
+document.getElementById('lapBtn').onclick = function() {
+    if (swState === 1) {
+        processLap(Date.now(), 0); // 手動計測は固定表示なし
+    } else {
+        if(confirm("データを破棄してリセットしますか？")) location.reload();
+    }
+};
+
+document.getElementById('reloadBtn').onclick = () => { if(confirm("データを破棄してリロードしますか？")) location.reload(); };
+
+document.getElementById('historyBtn').onclick = () => {
+    document.getElementById('history-body').innerHTML = lapRecords.map(r => `<tr><td>${r.no}</td><td>${r.s1}</td><td>${r.s2}</td><td>${r.s3}</td><td>${timeFormat(r.time)}</td><td>${r.max}</td><td>${r.maxRpm}</td></tr>`).join('');
+    document.getElementById('history-page').style.display = 'block';
+};
+
+document.getElementById('gpxBtn').onclick = () => {
+    if (gpsPoints.length === 0) { alert("GPSログデータがありません"); return; }
+    let gpx = `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="KLAP"><trk><trkseg>`;
+    gpsPoints.forEach(p => { gpx += `<trkpt lat="${p.lat}" lon="${p.lon}"><time>${new Date(p.time).toISOString()}</time><extensions><rpm>${Math.round(p.rpm)}</rpm></extensions></trkpt>`; });
+    gpx += `</trkseg></trk></gpx>`;
+    const blob = new Blob([gpx], { type: 'application/gpx+xml' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `log_${new Date().getTime()}.gpx`; a.click();
 };
 
 function tick() {
     if (swState !== 1) return;
+    if (currentRPM > maxRpmInLap) maxRpmInLap = Math.round(currentRPM);
     const now = Date.now();
     document.getElementById('display').textContent = "TOTAL " + timeFormat(now - startTime);
     const d1 = document.getElementById('display1');
-    if (isFrozen && now < freezeUntil) { d1.textContent = freezeDisplayTime; d1.style.color = "var(--hrc-white)"; }
-    else { isFrozen = false; d1.textContent = timeFormat(now - (lapStartTime || startTime)); d1.style.color = "var(--hrc-white)"; }
+    if (isFrozen && now < freezeUntil) d1.textContent = freezeDisplayTime;
+    else d1.textContent = timeFormat(now - (lapStartTime || startTime));
     requestAnimationFrame(tick);
 }
 
+// --- Tachometer ---
 function drawTacho(rpm) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const w = canvas.width, h = canvas.height, segments = 75, active = Math.floor((rpm / 14000) * segments);
@@ -182,13 +229,13 @@ function drawTacho(rpm) {
     document.getElementById('max_speed_val').textContent = maxSpeedInLap;
 }
 
+// --- Connections ---
 document.getElementById('usbGpsBtn').onclick = async function() {
     try {
         device = await navigator.usb.requestDevice({ filters: [] });
         await device.open(); await device.selectConfiguration(1); await device.claimInterface(1);
-        this.className = 'active';
         while (device) { const res = await device.transferIn(2, 512); const linesN = (nmeaBuffer + new TextDecoder().decode(res.data)).split(/\r?\n/); nmeaBuffer = linesN.pop(); linesN.forEach(parseNMEA); }
-    } catch (e) { this.className = ''; }
+    } catch (e) { document.getElementById('usbGpsBtn').classList.remove('active'); }
 };
 
 document.getElementById('btConnect').onclick = async function() {
@@ -198,47 +245,41 @@ document.getElementById('btConnect').onclick = async function() {
         const service = await server.getPrimaryService(SERVICE_UUID);
         const pC = await service.getCharacteristic(PULSE_UUID);
         await pC.startNotifications();
-        this.className = 'active';
+        this.classList.add('active');
         pC.oncharacteristicvaluechanged = (e) => { 
             const data = e.target.value; 
             currentRPM = (data.getUint16(0, true) * 60) / pulsePerRev; 
             currentTemp = data.getUint8(2); 
             document.getElementById('temp_val').textContent = currentTemp; 
         };
-    } catch (e) { this.className = ''; }
+    } catch (e) { this.classList.remove('active'); }
 };
 
+// --- Helpers ---
 function getIntersection(p1, p2, line) { if (!line) return null; const x1=p1.lon, y1=p1.lat, x2=p2.lon, y2=p2.lat, x3=line.p2.lon, y3=line.p2.lat, x4=line.p1.lon, y4=line.p1.lat; const den = (y4-y3)*(x2-x1)-(x4-x3)*(y2-y1); if (Math.abs(den)<1e-12) return null; const t = ((x4-x3)*(y1-y3)-(y4-y3)*(x1-x3))/den; return (t>=0 && t<=1) ? p1.time+(p2.time-p1.time)*t : null; }
 function dmmToDec(d, dir){ if(!d) return 0; const dot=d.indexOf('.'); const deg=parseInt(d.substring(0,dot-2)), min=parseFloat(d.substring(dot-2)); const dec=deg+(min/60); return (dir==='S'||dir==='W')?-dec:dec; }
 function timeFormat(ms){ if(ms===Infinity||ms<0)return "--:--.---"; const m=Math.floor(ms/60000), s=Math.floor((ms%60000)/1000), mss=Math.floor(ms%1000); return `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}.${mss.toString().padStart(3,'0')}`; }
 
 window.onresize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight - 60; };
-
 window.onload = () => {
     window.dispatchEvent(new Event('resize'));
     pulsePerRev = parseFloat(localStorage.getItem('pl1')) || 1;
     cooldownMs = parseInt(localStorage.getItem('cooldown')) || 30000;
+    gpsThreshold = parseFloat(localStorage.getItem('threshold')) || 0.0001;
     
+    if (!localStorage.getItem('startLineP1Lat') || !localStorage.getItem('cooldown') || !localStorage.getItem('threshold')) {
+        document.getElementById('mapBtn').classList.add('config-missing');
+    }
+
     ['startLine', 's1Line', 's2Line', 's3Line'].forEach(key => {
         const p1Lat = localStorage.getItem(key + 'P1Lat');
         if (p1Lat) {
-            lines[key] = { 
-                p1: { lat: parseFloat(p1Lat), lon: parseFloat(localStorage.getItem(key + 'P1Lon')) }, 
-                p2: { lat: parseFloat(localStorage.getItem(key + 'P2Lat')), lon: parseFloat(localStorage.getItem(key + 'P2Lon')) } 
-            };
-            if (key !== 'startLine') {
-                const box = document.getElementById(key.replace('Line', '') + '_val');
-                if (box) box.parentElement.style.display = 'block';
-            }
+            lines[key] = { p1: { lat: parseFloat(p1Lat), lon: parseFloat(localStorage.getItem(key + 'P1Lon')) }, p2: { lat: parseFloat(localStorage.getItem(key + 'P2Lat')), lon: parseFloat(localStorage.getItem(key + 'P2Lon')) } };
+            if (key !== 'startLine') document.getElementById(key.replace('Line', '') + '_box').style.display = 'block';
         }
     });
-
-    const isReady = localStorage.getItem('startLineP1Lat') ? true : false;
-    document.getElementById('reloadBtn').className = isReady ? '' : 'waiting';
-
     (function anim(){ drawTacho(currentRPM); requestAnimationFrame(anim); })();
 };
-document.getElementById('reloadBtn').onclick = () => window.location.href = window.location.pathname;
 </script>
 </body>
 </html>
