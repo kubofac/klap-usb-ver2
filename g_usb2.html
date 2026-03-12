@@ -233,12 +233,52 @@ document.getElementById('historyBtn').onclick = () => {
 };
 
 document.getElementById('gpxBtn').onclick = () => {
-    if (gpsPoints.length === 0) return;
-    let gpx = `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="KLAP"><trk><trkseg>`;
-    gpsPoints.forEach(p => { gpx += `<trkpt lat="${p.lat}" lon="${p.lon}"><time>${new Date(p.time).toISOString()}</time><extensions><rpm>${Math.round(p.rpm)}</rpm></extensions></trkpt>`; });
+    if (gpsPoints.length === 0) {
+        alert("保存するデータがありません");
+        return;
+    }
+
+    // LocalStorageから設定済みの各ライン座標を取得する補助関数
+    const getL = (k) => {
+        const p1lat = localStorage.getItem(k + 'P1Lat');
+        const p1lon = localStorage.getItem(k + 'P1Lon');
+        const p2lat = localStorage.getItem(k + 'P2Lat');
+        const p2lon = localStorage.getItem(k + 'P2Lon');
+        // 座標が揃っている場合のみカンマ区切り文字列を返す
+        return p1lat ? `${p1lat},${p1lon},${p2lat},${p2lon}` : "";
+    };
+    
+    // ラインデータを一つの文字列にまとめる (解析側でパースしやすい形式)
+    const lineData = `SL:${getL('startLine')}|S1:${getL('s1Line')}|S2:${getL('s2Line')}|S3:${getL('s3Line')}`;
+
+    // GPXのヘッダー部分を作成（<metadata>内の<desc>に情報を埋め込む）
+    let gpx = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="KLAP">
+  <metadata>
+    <desc>LINE_DATA[${lineData}]</desc>
+  </metadata>
+  <trk><trkseg>`;
+    
+    // 走行ログ（トラックポイント）の書き出し
+    gpsPoints.forEach(p => {
+        gpx += `<trkpt lat="${p.lat}" lon="${p.lon}">
+          <time>${new Date(p.time).toISOString()}</time>
+          <extensions>
+            <rpm>${Math.round(p.rpm)}</rpm>
+          </extensions>
+        </trkpt>`;
+    });
+    
     gpx += `</trkseg></trk></gpx>`;
+
+    // ファイルのダウンロード処理
     const blob = new Blob([gpx], { type: 'application/gpx+xml' });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `log_${Date.now()}.gpx`; a.click();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `log_${Date.now()}.gpx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
 };
 
 function tick() {
@@ -314,3 +354,4 @@ window.onload = () => {
 </script>
 </body>
 </html>
+
