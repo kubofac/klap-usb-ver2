@@ -3,31 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>KLAP_DEGI_USB - V8.6.2</title>
+    <title>KLAP_DEGI_USB - V8.6.3</title>
     <style>
         :root { --hrc-red: #E4002B; --hrc-white: #ffffff; --bg-dark: #000000; --hrc-orange: #FFA500; }
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: var(--bg-dark); color: var(--hrc-white); font-family: 'Arial Black', sans-serif; overflow: hidden; }
         #dashboard { position: relative; display: flex; flex-direction: column; height: 100dvh; width: 100vw; }
-        
-        /* メインキャンバス */
         #canvas { position: absolute; top: 0; left: 0; width: 100%; height: calc(100% - 45px); z-index: 1; }
         
+        /* UIレイアウト */
         .main-ui-container { position: absolute; right: 10px; top: 160px; bottom: 55px; display: flex; align-items: flex-start; gap: 40px; z-index: 20; }
         #info-overlay { display: flex; flex-direction: column; align-items: flex-end; text-align: right; gap: 5px; }
         #rpm_val { font-size: 12vh; font-weight: 900; line-height: 0.8; text-shadow: 3px 3px 12px #000; }
         #display1 { font-size: 16vh; font-weight: 900; line-height: 0.9; color: var(--hrc-white); text-shadow: 4px 4px 15px #000; }
         
-        /* セクター表示 */
-        #sector-container { display: flex; justify-content: flex-end; gap: 15px; font-size: 4vh; font-weight: 900; height: 5vh; margin-top: 5px; }
+        /* セクター表示：デフォルトは非表示 */
+        #sector-container { display: flex; justify-content: flex-end; gap: 15px; font-size: 3.5vh; font-weight: 900; height: 4vh; margin-top: 5px; }
         .sec-box { display: none; text-shadow: 2px 2px 10px #000; }
         .sec-val { color: var(--hrc-white); min-width: 2.2em; }
+        
         #display { font-size: 3.5vh; color: #bbb; text-shadow: 1px 1px 6px #000; margin-top: 5px; }
 
-        /* 右側パネル */
         .right-panels { display: flex; flex-direction: row; gap: 15px; height: 100%; align-items: flex-start; }
         #lap-panel { width: 160px; height: 100%; overflow: hidden; }
         #lap { height: 100%; overflow-y: auto; scrollbar-width: none; }
-        .lap-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 18px; font-weight: 900; border: none !important; }
+        .lap-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 18px; font-weight: 900; }
         .best-lap { color: var(--hrc-red) !important; }
 
         .data-panel { display: flex; flex-direction: column; gap: 12px; width: 100px; }
@@ -35,18 +34,15 @@
         .label { font-size: 10px; color: var(--hrc-red); font-weight: bold; }
         .val { font-size: 36px; font-weight: 900; line-height: 0.9; }
 
-        /* 履歴ページ */
-        #history-page { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.98); z-index: 2000; padding: 20px; box-sizing: border-box; overflow-y: auto; }
+        /* History */
+        #history-page { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.98); z-index: 2000; padding: 15px; box-sizing: border-box; overflow-y: auto; }
         #history-summary { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 15px; background: #111; padding: 10px; border-radius: 5px; border: 1px solid #333; text-align: center; }
-        .summary-item { font-size: 14px; font-weight: bold; }
         .summary-label { font-size: 9px; color: var(--hrc-red); display: block; }
-        
-        #history-table { width: 100%; border-collapse: collapse; font-size: 14px; text-align: center; }
+        #history-table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: center; }
         #history-table th { color: var(--hrc-red); font-size: 10px; padding: 8px 2px; border-bottom: 2px solid var(--hrc-red); }
         #history-table td { padding: 12px 2px; border-bottom: 1px solid rgba(255,255,255,0.1); }
         #history-close { position: sticky; top: 0; background: var(--hrc-red); padding: 12px; text-align: center; font-weight: bold; cursor: pointer; border-radius: 4px; z-index: 2001; margin-bottom: 10px; }
 
-        /* フッター */
         footer { height: 40px; display: flex; gap: 3px; padding: 3px; background: #000; border-top: 1px solid #333; z-index: 100; position: fixed; bottom: 0; left: 0; right: 0; }
         button { flex: 1; background: #1a1a1a; color: #fff; border: 1px solid #444; border-radius: 4px; font-size: 8px; font-weight: bold; cursor: pointer; }
         button.active { background: var(--hrc-red) !important; color: #fff !important; }
@@ -96,28 +92,36 @@
         <div class="summary-item"><span class="summary-label">TOTAL LAPS</span><span id="sum-laps">0</span></div>
     </div>
     <table id="history-table">
-        <thead>
-            <tr><th>L</th><th>S1</th><th>S2</th><th>S3</th><th>TIME</th><th>MAX</th></tr>
-        </thead>
+        <thead><tr><th>L</th><th>S1</th><th>S2</th><th>S3</th><th>TIME</th><th>MAX</th></tr></thead>
         <tbody id="history-body"></tbody>
     </table>
-    <div style="text-align: center; color: #666; font-size: 10px; margin-top: 20px;">※タップしてラップを削除</div>
 </div>
 
 <script>
 'use strict';
 const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b", PULSE_UUID = "f4deb353-a4cf-4ffb-badb-2a5f2e3bb630";
-let swState = 0, startTime = 0, lapStartTime = 0, lastLapTime = 0, lapRecords = [];
+let swState = 0, startTime = 0, lapStartTime = 0, lapRecords = [];
 let currentRPM = 0, currentTemp = 0, currentSpeedKmh = 0, maxSpeedInLap = 0, sessionBest = Infinity, sessionMaxSpeed = 0;
-let lastUsbDataTime = 0, lastBleDataTime = 0, usbWaiting = false, bleWaiting = false;
+let lastUsbDataTime = 0, lastBleDataTime = 0, usbWaiting = false;
 let isFrozen = false, freezeDisplayTime = "", freezeStartTime = 0;
 let device = null, nmeaBuffer = '', lastPos = null;
-let lines = { start: {p1:null,p2:null}, s1: {p1:null,p2:null}, s2: {p1:null,p2:null}, s3: {p1:null,p2:null} };
+let lines = { start: null, s1: null, s2: null, s3: null };
 let trackLogs = [], currentLapLog = [];
 
 const canvas = document.getElementById('canvas'), ctx = canvas.getContext('2d');
-const rpmElement = document.getElementById('rpm_val');
-const speedElement = document.getElementById('speed_val');
+
+// --- 交差判定 (V8.5.3準拠) ---
+function getIntersection(p1, p2, line) {
+    if (!line) return null;
+    const x1=p1.lon, y1=p1.lat, x2=p2.lon, y2=p2.lat;
+    const x3=line.p2.lon, y3=line.p2.lat, x4=line.p1.lon, y4=line.p1.lat;
+    const den = (y4-y3)*(x2-x1) - (x4-x3)*(y2-y1);
+    if (Math.abs(den) < 1e-12) return null;
+    const t = ((x4-x3)*(y1-y3)-(y4-y3)*(x1-x3))/den;
+    const u = ((x2-x1)*(y1-y3)-(y2-y1)*(x1-x3))/den;
+    if (t>=0 && t<=1 && u>=-0.2 && u<=1.2) return p1.time + (p2.time-p1.time)*t;
+    return null;
+}
 
 // BLE
 document.getElementById('btConnect').onclick = async function() {
@@ -127,7 +131,6 @@ document.getElementById('btConnect').onclick = async function() {
         const service = await server.getPrimaryService(SERVICE_UUID);
         const pC = await service.getCharacteristic(PULSE_UUID);
         await pC.startNotifications();
-        bleWaiting = true;
         const pl1 = parseInt(localStorage.getItem('pl1')) || 1;
         pC.oncharacteristicvaluechanged = (e) => {
             const data = e.target.value;
@@ -135,27 +138,8 @@ document.getElementById('btConnect').onclick = async function() {
             currentRPM = (data.getUint16(0, true) * 60) / pl1;
             currentTemp = data.getUint8(2);
         };
-    } catch (e) { bleWaiting = false; }
+    } catch (e) { console.error(e); }
 };
-
-// Drawing
-function drawTacho(rpm) {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const w = canvas.width, h = canvas.height, segments = 75, active = Math.floor((rpm / 14000) * segments);
-    const sX = 20, hY = 80, bY = h - 20, rad = bY - hY, curveEnd = 30;
-    for (let i = 0; i <= segments; i++) {
-        let x, y, ang, prog;
-        if (i <= curveEnd) { prog = i / curveEnd; ang = Math.PI + (prog * (Math.PI / 2)); x = sX + rad + Math.cos(ang) * rad; y = hY + rad + Math.sin(ang) * rad; }
-        else { prog = (i - curveEnd) / (segments - curveEnd); x = (sX + rad) + (prog * (w - 15 - (sX + rad))); y = hY; ang = 1.5 * Math.PI; }
-        if (i % 10 === 0 || i === segments) { ctx.fillStyle = i < active ? "#fff" : "#444"; ctx.font = "italic bold 22px Arial"; ctx.textAlign = "center"; ctx.fillText(Math.round((i / segments) * 14), x + Math.cos(ang) * 45, y + Math.sin(ang) * 45); }
-        if (i < segments) { ctx.fillStyle = i < active ? (((i/segments)*14000) >= 12500 ? "#E4002B" : (((i/segments)*14000) >= 8000 ? "#004098" : "#FFFFFF")) : "#222"; ctx.save(); ctx.translate(x, y); ctx.rotate(ang + Math.PI / 2); ctx.fillRect(-5, -23, 10, 46); ctx.restore(); }
-    }
-    rpmElement.textContent = Math.floor(rpm);
-    speedElement.textContent = Math.round(currentSpeedKmh);
-    document.getElementById('temp_val').textContent = currentTemp;
-}
-
-function renderLoop() { drawTacho(currentRPM); requestAnimationFrame(renderLoop); }
 
 // GPS
 function parseNMEA(line) {
@@ -168,43 +152,51 @@ function parseNMEA(line) {
     }
     if (line.includes('GGA') && p[6] !== '0') {
         const cur = { lat: dmmToDec(p[2], p[3]), lon: dmmToDec(p[4], p[5]), time: Date.now() };
-        if (swState === 1) currentLapLog.push({...cur, speed: currentSpeedKmh, rpm: currentRPM});
+        if (swState === 1) {
+            currentLapLog.push({...cur, speed: currentSpeedKmh, rpm: currentRPM});
+            if (lastPos) {
+                // セクター通過チェック
+                ['s1','s2','s3'].forEach(s => {
+                    if (lines[s]) {
+                        const hit = getIntersection(lastPos, cur, lines[s]);
+                        if (hit && lapStartTime > 0) {
+                            document.getElementById(s + '_val').textContent = ((hit - lapStartTime)/1000).toFixed(2);
+                        }
+                    }
+                });
+                // スタート・フィニッシュチェック
+                const hitStart = getIntersection(lastPos, cur, lines.start);
+                if (hitStart && (hitStart - (lapStartTime||startTime) > 5000)) processLap(hitStart, true);
+            }
+        }
         lastPos = cur;
     }
 }
-function dmmToDec(d, dir){ if(!d || d.indexOf('.')===-1) return 0; const dot=d.indexOf('.'); const deg=parseInt(d.substring(0,dot-2)), min=parseFloat(d.substring(dot-2)); let dec=deg+(min/60); return (dir==='S'||dir==='W')?-dec:dec; }
-function timeFormat(ms){ if(ms === Infinity) return "--:--.---"; let m=Math.floor(ms/60000), s=Math.floor((ms%60000)/1000), mss=Math.floor(ms%1000); return `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}.${mss.toString().padStart(3,'0')}`; }
 
-// Lap Logic
+function dmmToDec(d, dir){ if(!d || d.indexOf('.')===-1) return 0; const dot=d.indexOf('.'); const deg=parseInt(d.substring(0,dot-2)), min=parseFloat(d.substring(dot-2)); let dec=deg+(min/60); return (dir==='S'||dir==='W')?-dec:dec; }
+function timeFormat(ms){ if(ms === Infinity || isNaN(ms)) return "--:--.---"; let m=Math.floor(ms/60000), s=Math.floor((ms%60000)/1000), mss=Math.floor(ms%1000); return `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}.${mss.toString().padStart(3,'0')}`; }
+
 function processLap(t, f) {
     const now = t || Date.now();
     const lapTime = now - (lapStartTime || startTime);
     if (lapTime < 1000) return;
     
-    const record = {
+    lapRecords.unshift({
         time: lapTime,
         max: maxSpeedInLap,
         s1: document.getElementById('s1_val').textContent,
         s2: document.getElementById('s2_val').textContent,
         s3: document.getElementById('s3_val').textContent
-    };
-    
-    lapRecords.unshift(record);
+    });
     trackLogs.push([...currentLapLog]);
-    refreshBestTime();
+    sessionBest = Math.min(...lapRecords.map(r => r.time));
     
     lapStartTime = now;
     maxSpeedInLap = 0;
     currentLapLog = [];
-    
     ['s1_val','s2_val','s3_val'].forEach(id => document.getElementById(id).textContent = "--.--");
     updateLapList();
     if (f) { isFrozen = true; freezeDisplayTime = timeFormat(lapTime); freezeStartTime = Date.now(); }
-}
-
-function refreshBestTime() {
-    if (lapRecords.length === 0) { sessionBest = Infinity; return; }
-    sessionBest = Math.min(...lapRecords.map(r => r.time));
 }
 
 function updateLapList() {
@@ -217,6 +209,22 @@ function updateLapList() {
     });
 }
 
+function drawTacho(rpm) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const w = canvas.width, h = canvas.height, segments = 75, active = Math.floor((rpm / 14000) * segments);
+    const sX = 20, hY = 80, bY = h - 20, rad = bY - hY, curveEnd = 30;
+    for (let i = 0; i <= segments; i++) {
+        let x, y, ang, prog;
+        if (i <= curveEnd) { prog = i / curveEnd; ang = Math.PI + (prog * (Math.PI / 2)); x = sX + rad + Math.cos(ang) * rad; y = hY + rad + Math.sin(ang) * rad; }
+        else { prog = (i - curveEnd) / (segments - curveEnd); x = (sX + rad) + (prog * (w - 15 - (sX + rad))); y = hY; ang = 1.5 * Math.PI; }
+        if (i % 10 === 0 || i === segments) { ctx.fillStyle = i < active ? "#fff" : "#444"; ctx.font = "italic bold 18px Arial"; ctx.textAlign = "center"; ctx.fillText(Math.round((i/segments)*14), x+Math.cos(ang)*40, y+Math.sin(ang)*40); }
+        if (i < segments) { ctx.fillStyle = i < active ? (((i/segments)*14000) >= 12500 ? "#E4002B" : (((i/segments)*14000) >= 8000 ? "#004098" : "#FFFFFF")) : "#222"; ctx.save(); ctx.translate(x, y); ctx.rotate(ang + Math.PI / 2); ctx.fillRect(-5, -20, 10, 40); ctx.restore(); }
+    }
+    document.getElementById('rpm_val').textContent = Math.floor(rpm);
+    document.getElementById('speed_val').textContent = Math.round(currentSpeedKmh);
+    document.getElementById('temp_val').textContent = currentTemp;
+}
+
 function tick() { 
     if (swState !== 1) return;
     const now = Date.now();
@@ -224,59 +232,58 @@ function tick() {
     const d1 = document.getElementById('display1');
     if (isFrozen) { d1.textContent = freezeDisplayTime; if (now - freezeStartTime > 15000) isFrozen = false; }
     else { d1.textContent = lapStartTime > 0 ? timeFormat(now - lapStartTime) : "00:00.000"; }
-    setTimeout(tick, 30);
+    requestAnimationFrame(tick);
 }
 
-// History & Summary
-document.getElementById('historyBtn').onclick = () => {
-    const body = document.getElementById('history-body');
-    body.innerHTML = "";
-    document.getElementById('sum-best').textContent = timeFormat(sessionBest);
-    document.getElementById('sum-max').textContent = sessionMaxSpeed;
-    document.getElementById('sum-laps').textContent = lapRecords.length;
-
-    lapRecords.forEach((r, i) => {
-        const lapNum = lapRecords.length - i;
-        const tr = document.createElement('tr');
-        tr.onclick = () => { if(confirm(`L${lapNum} を削除しますか？`)) { lapRecords.splice(i,1); trackLogs.splice(i,1); refreshBestTime(); document.getElementById('historyBtn').click(); updateLapList(); } };
-        tr.innerHTML = `
-            <td>${lapNum}</td>
-            <td>${r.s1}</td>
-            <td>${r.s2}</td>
-            <td>${r.s3}</td>
-            <td style="font-weight:bold; color:${r.time===sessionBest?'var(--hrc-red)':'#fff'}">${timeFormat(r.time)}</td>
-            <td>${r.max}</td>`;
-        body.appendChild(tr);
-    });
-    document.getElementById('history-page').style.display = 'block';
-};
-
-document.getElementById('history-close').onclick = () => document.getElementById('history-page').style.display = 'none';
-
-// Others
+// UI Buttons
 document.getElementById('startBtn').onclick = function(){
     if(swState!==1){ swState=1; startTime=Date.now(); lapStartTime=0; this.className='active'; tick(); }
     else { swState=2; this.className=''; document.getElementById('saveLogBtn').style.display='block'; }
 };
 document.getElementById('lapBtn').onclick = () => {
     if(swState===1) processLap(Date.now(), true);
-    else if(confirm("データをリセットしますか？")){ swState=0; lapRecords=[]; trackLogs=[]; currentLapLog=[]; sessionBest=Infinity; sessionMaxSpeed=0; isFrozen=false; updateLapList(); }
+    else if(confirm("リセットしますか？")){ swState=0; lapRecords=[]; trackLogs=[]; sessionBest=Infinity; updateLapList(); }
 };
+document.getElementById('historyBtn').onclick = () => {
+    const body = document.getElementById('history-body');
+    body.innerHTML = "";
+    document.getElementById('sum-best').textContent = timeFormat(sessionBest);
+    document.getElementById('sum-max').textContent = sessionMaxSpeed;
+    document.getElementById('sum-laps').textContent = lapRecords.length;
+    lapRecords.forEach((r, i) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${lapRecords.length-i}</td><td>${r.s1}</td><td>${r.s2}</td><td>${r.s3}</td><td style="font-weight:bold; color:${r.time===sessionBest?'var(--hrc-red)':'#fff'}">${timeFormat(r.time)}</td><td>${r.max}</td>`;
+        body.appendChild(tr);
+    });
+    document.getElementById('history-page').style.display = 'block';
+};
+document.getElementById('history-close').onclick = () => document.getElementById('history-page').style.display='none';
+
 document.getElementById('usbGpsBtn').onclick = async () => {
-    try {
-        device = await navigator.usb.requestDevice({ filters: [] });
-        await device.open(); await device.selectConfiguration(1); await device.claimInterface(1);
-        usbWaiting = true;
-        while (device) {
-            const res = await device.transferIn(2, 512);
-            const linesN = (nmeaBuffer + new TextDecoder().decode(res.data)).split(/\r?\n/);
-            nmeaBuffer = linesN.pop(); linesN.forEach(parseNMEA);
-        }
-    } catch (e) { usbWaiting = false; }
+    device = await navigator.usb.requestDevice({ filters: [] });
+    await device.open(); await device.selectConfiguration(1); await device.claimInterface(1);
+    while (device) {
+        const res = await device.transferIn(2, 512);
+        const linesN = (nmeaBuffer + new TextDecoder().decode(res.data)).split(/\r?\n/);
+        nmeaBuffer = linesN.pop(); linesN.forEach(parseNMEA);
+    }
 };
-document.getElementById('reloadBtn').onclick = () => location.reload();
+
 window.onresize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight - 45; };
-window.onload = () => { window.dispatchEvent(new Event('resize')); renderLoop(); };
+window.onload = () => {
+    window.dispatchEvent(new Event('resize'));
+    ['start', 's1', 's2', 's3'].forEach(key => {
+        const lat = localStorage.getItem(key + 'LineP1Lat');
+        if (lat) {
+            lines[key] = {
+                p1: { lat: parseFloat(lat), lon: parseFloat(localStorage.getItem(key + 'LineP1Lon')) },
+                p2: { lat: parseFloat(localStorage.getItem(key + 'LineP2Lat')), lon: parseFloat(localStorage.getItem(key + 'LineP2Lon')) }
+            };
+            if (key !== 'start') document.getElementById(key + '_box').style.display = 'block';
+        }
+    });
+    (function anim(){ drawTacho(currentRPM); requestAnimationFrame(anim); })();
+};
 </script>
 </body>
 </html>
