@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>KLAP_DEGI_USB - V8.9.7</title>
+    <title>KLAP_DEGI_USB - V9.0.0</title>
     <style>
         :root { --hrc-red: #E4002B; --hrc-white: #ffffff; --bg-dark: #000000; --hrc-orange: #FFA500; }
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: var(--bg-dark); color: var(--hrc-white); font-family: 'Arial Black', sans-serif; overflow: hidden; }
@@ -19,6 +19,7 @@
         #lap-panel { width: 175px; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
         #lap { flex: 1; overflow-y: auto; scrollbar-width: none; }
         .lap-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 18px; font-weight: 900; }
+        .best-lap { color: var(--hrc-red) !important; } 
         .data-panel { display: flex; flex-direction: column; gap: 15px; width: 110px; }
         .val { font-size: 40px; font-weight: 900; line-height: 0.9; text-shadow: 2px 2px 8px #000; }
         .label { font-size: 11px; color: var(--hrc-red); font-weight: bold; }
@@ -70,16 +71,31 @@
 </div>
 
 <script>
-/* ============================================================
+/* ==========================================================================
    APPLICATION SPECIFICATIONS (DO NOT REMOVE)
-   1. FOOTER: Order [USB GPS][BLE][TIMER][LAP][HISTORY][GPX][MAP][RELOAD]
-   2. RELOAD: Rightmost, confirmation required.
-   3. CONFIG WARNING: MAP button is ORANGE if 'startLineP1Lat', 'cooldown', 
-      or 'thresh' is missing in LocalStorage.
-   4. LAP DISPLAY: Auto(GPS): 15s freeze / Manual(Button): 0s freeze.
-   5. USB GPS: Uses 'usb_interface' and 'usb_endpoint' from Storage.
-      Button turns RED only after valid GPS FIX (A/1+).
-   ============================================================ */
+   --------------------------------------------------------------------------
+   1. FOOTER LAYOUT:
+      Order: [USB GPS] [BLE START] [TIMER] [LAP/RESET] [HISTORY] [GPX SAVE] [MAP] [RELOAD]
+   
+   2. BUTTON LOGIC:
+      - RELOAD: Rightmost. Requires confirmation.
+      - LAP/RESET: 
+         * WHILE MEASURING (swState=1): Records lap instantly. NO ALERT. NO FREEZE.
+         * WHILE STOPPED (swState!=1): Requires confirmation to reload/reset.
+
+   3. DISPLAY LOGIC (FREEZE):
+      - AUTO LAP (GPS line hit): Freezes time display for 15 seconds.
+      - MANUAL LAP (Button press): NO FREEZE. Next lap starts counting immediately.
+   
+   4. DATA LOGIC (V9.0.0 MULTI-BEST):
+      - HISTORY: Newest laps at the TOP.
+      - MULTI-BEST: HISTORY画面にて、S1/S2/S3/TIME/MAX SPD/MAX RPMの各項目で
+        セッション中のベスト値を個別に赤色ハイライトする。
+      - MAP WARNING: MAP button turns ORANGE if 'startLineP1Lat', 'cooldown', or 'thresh' is missing.
+   
+   5. USB CONFIG: Uses 'usb_interface' and 'usb_endpoint' from LocalStorage.
+   ========================================================================== */
+
 'use strict';
 const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b", PULSE_UUID = "f4deb353-a4cf-4ffb-badb-2a5f2e3bb630";
 let swState = 0, startTime = 0, lapStartTime = 0, lapRecords = [], gpsPoints = [];
@@ -121,12 +137,21 @@ function parseNMEA(line) {
     }
 }
 
+function updateLapList() {
+    if (lapRecords.length === 0) return;
+    const bestTime = Math.min(...lapRecords.map(r => r.time));
+    document.getElementById('lap').innerHTML = lapRecords.map(r => {
+        const isBest = r.time === bestTime && lapRecords.length > 1;
+        return `<div class="lap-row ${isBest ? 'best-lap' : ''}"><span>L${r.no}</span><span>${timeFormat(r.time)}</span></div>`;
+    }).join('');
+}
+
 function processLap(t, freezeMs) {
     const now = t || Date.now();
     const lapTime = now - (lapStartTime || startTime);
     const lapData = { no: lapRecords.length + 1, time: lapTime, max: Math.round(maxSpeedInLap), maxRpm: Math.round(maxRpmInLap), s1: document.getElementById('s1_val').textContent, s2: document.getElementById('s2_val').textContent, s3: document.getElementById('s3_val').textContent };
     lapRecords.unshift(lapData);
-    document.getElementById('lap').innerHTML = lapRecords.map(r => `<div class="lap-row"><span>L${r.no}</span><span>${timeFormat(r.time)}</span></div>`).join('');
+    updateLapList();
     if (freezeMs > 0) { isFrozen = true; freezeDisplayTime = timeFormat(lapTime); freezeUntil = Date.now() + freezeMs; }
     else { isFrozen = false; }
     lapStartTime = now; maxSpeedInLap = 0; maxRpmInLap = 0;
@@ -149,29 +174,64 @@ document.getElementById('lapBtn').onclick = function() {
 
 document.getElementById('usbGpsBtn').onclick = async function() {
     try {
-        // Storageから設定を読み込み。なければデフォルト(1, 2)
         const iface = parseInt(localStorage.getItem('usb_interface')) || 1;
         const ep = parseInt(localStorage.getItem('usb_endpoint')) || 2;
-        
         device = await navigator.usb.requestDevice({ filters: [] });
         await device.open();
         await device.selectConfiguration(1);
         await device.claimInterface(iface);
-        
         while (device) {
             const res = await device.transferIn(ep, 512);
             const linesN = (nmeaBuffer + new TextDecoder().decode(res.data)).split(/\r?\n/);
             nmeaBuffer = linesN.pop();
             linesN.forEach(parseNMEA);
         }
-    } catch (e) { console.error(e); document.getElementById('usbGpsBtn').classList.remove('active'); }
+    } catch (e) { document.getElementById('usbGpsBtn').classList.remove('active'); }
 };
 
-document.getElementById('reloadBtn').onclick = () => { if(confirm("データをリセットしてリロードしますか？")) location.reload(); };
+document.getElementById('reloadBtn').onclick = () => { if(confirm("データを破棄してリロードしますか？")) location.reload(); };
+
 document.getElementById('historyBtn').onclick = () => {
-    document.getElementById('history-body').innerHTML = lapRecords.map(r => `<tr><td>${r.no}</td><td>${r.s1}</td><td>${r.s2}</td><td>${r.s3}</td><td>${timeFormat(r.time)}</td><td>${r.max}</td><td>${r.maxRpm}</td></tr>`).join('');
+    if (lapRecords.length === 0) return;
+    
+    // 各項目のベスト値を算出
+    const getBestNumeric = (key, type) => {
+        const vals = lapRecords.map(r => {
+            const v = parseFloat(r[key]);
+            return isNaN(v) ? (type === 'min' ? Infinity : -1) : v;
+        });
+        return type === 'min' ? Math.min(...vals) : Math.max(...vals);
+    };
+
+    const bestS1 = getBestNumeric('s1', 'min');
+    const bestS2 = getBestNumeric('s2', 'min');
+    const bestS3 = getBestNumeric('s3', 'min');
+    const bestTime = Math.min(...lapRecords.map(r => r.time));
+    const bestMaxSpd = getBestNumeric('max', 'max');
+    const bestMaxRpm = getBestNumeric('maxRpm', 'max');
+
+    document.getElementById('history-body').innerHTML = lapRecords.map(r => {
+        const isBestS1 = parseFloat(r.s1) === bestS1;
+        const isBestS2 = parseFloat(r.s2) === bestS2;
+        const isBestS3 = parseFloat(r.s3) === bestS3;
+        const isBestTime = r.time === bestTime;
+        const isBestSpd = r.max === bestMaxSpd && r.max > 0;
+        const isBestRpm = r.maxRpm === bestMaxRpm && r.maxRpm > 0;
+
+        return `
+            <tr style="${isBestTime ? 'background: rgba(228,0,43,0.1);' : ''}">
+                <td>${r.no}</td>
+                <td class="${isBestS1 ? 'best-lap' : ''}">${r.s1}</td>
+                <td class="${isBestS2 ? 'best-lap' : ''}">${r.s2}</td>
+                <td class="${isBestS3 ? 'best-lap' : ''}">${r.s3}</td>
+                <td class="${isBestTime ? 'best-lap' : ''}">${timeFormat(r.time)}</td>
+                <td class="${isBestSpd ? 'best-lap' : ''}">${r.max}</td>
+                <td class="${isBestRpm ? 'best-lap' : ''}">${r.maxRpm}</td>
+            </tr>`;
+    }).join('');
     document.getElementById('history-page').style.display = 'block';
 };
+
 document.getElementById('gpxBtn').onclick = () => {
     if (gpsPoints.length === 0) return;
     let gpx = `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="KLAP"><trk><trkseg>`;
@@ -234,11 +294,9 @@ window.onload = () => {
     window.dispatchEvent(new Event('resize'));
     pulsePerRev = parseFloat(localStorage.getItem('pl1')) || 1;
     cooldownMs = parseInt(localStorage.getItem('cooldown')) || 30000;
-    // 設定ツールのキー名 'thresh' に統一
     const tVal = localStorage.getItem('thresh');
     gpsThreshold = tVal ? parseFloat(tVal) / 100000 : 0.0001;
 
-    // MAPボタン警告色判定 (thresh / cooldown / startLineP1Lat)
     const ck = (k) => localStorage.getItem(k) !== null;
     if (!ck('startLineP1Lat') || !ck('cooldown') || !ck('thresh')) {
         document.getElementById('mapBtn').classList.add('config-missing');
