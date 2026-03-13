@@ -278,7 +278,13 @@ function dmmToDec(d, dir){ if(!d) return 0; const dot=d.indexOf('.'); const deg=
 function timeFormat(ms){ if(ms===Infinity||ms<0)return "--:--.---"; const m=Math.floor(ms/60000), s=Math.floor((ms%60000)/1000), mss=Math.floor(ms%1000); return `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}.${mss.toString().padStart(3,'0')}`; }
 
 window.onresize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight - 60; };
-window.onload = () => {
+
+    document.getElementById('reloadBtn').onclick = () => {
+    if (confirm("画面をリロードして接続をリセットしますか？")) {
+        location.reload();
+    }
+};
+    window.onload = () => {
     window.dispatchEvent(new Event('resize'));
     pulsePerRev = parseFloat(localStorage.getItem('pl1')) || 1;
     cooldownMs = parseInt(localStorage.getItem('cooldown')) || 30000;
@@ -292,6 +298,8 @@ window.onload = () => {
     if (!localStorage.getItem('startLineP1Lat')) document.getElementById('mapBtn').classList.add('config-missing');
     (function anim(){ drawTacho(currentRPM); requestAnimationFrame(anim); })();
 };
+
+    
 </script>
 </body>
 </html>
