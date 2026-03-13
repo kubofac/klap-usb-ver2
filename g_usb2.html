@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>KLAP_DEGI_USB - V10.0.0</title>
+    <title>KLAP_DEGI_USB - V10.2.0</title>
+    <link rel="manifest" href="/manifest.json">  
+
     <style>
         :root { --hrc-red: #E4002B; --hrc-white: #ffffff; --bg-dark: #000000; --hrc-orange: #FFA500; }
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: var(--bg-dark); color: var(--hrc-white); font-family: 'Arial Black', sans-serif; overflow: hidden; }
@@ -79,7 +81,7 @@ let lines = { startLine: null, s1Line: null, s2Line: null, s3Line: null };
 let currentSpeedKmh = 0, maxSpeedInLap = 0, maxRpmInLap = 0;
 let isFrozen = false, freezeDisplayTime = "", freezeUntil = 0;
 let pulsePerRev = 1, cooldownMs = 30000;
-let validDirection = null; // 最初のスタート通過時の向き
+let validDirection = null; // 最初のスタート通過時の方向
 let s1_abs = 0, s2_abs = 0; // 区間計算用
 
 const canvas = document.getElementById('canvas'), ctx = canvas.getContext('2d');
@@ -105,6 +107,12 @@ function parseNMEA(line) {
     if (line.includes('RMC') || line.includes('GGA')) {
         const p = line.split(',');
         let hasFix = false;
+        const btn = document.getElementById('usbGpsBtn');
+        
+        // 接続されているのでオレンジ
+        btn.style.background = "var(--hrc-orange)";
+        btn.style.color = "#000";
+
         if (line.includes('RMC') && p[2] === 'A') {
             hasFix = true;
             currentSpeedKmh = parseFloat(p[7]) * 1.852;
@@ -113,7 +121,7 @@ function parseNMEA(line) {
         if (line.includes('GGA') && (p[6] !== '0' && p[6] !== '')) {
             hasFix = true;
             const lat = dmmToDec(p[2], p[3]), lon = dmmToDec(p[4], p[5]);
-            const cur = { lat, lon, rpm: currentRPM, time: Date.now() };
+            const cur = { lat, lon, rpm: currentRPM, speed: currentSpeedKmh, time: Date.now() };
             if (swState === 1) gpsPoints.push(cur);
             
             if (swState === 1 && lastPos) {
@@ -123,7 +131,7 @@ function parseNMEA(line) {
                     if (validDirection === null) validDirection = hitSL.dir;
                     if (hitSL.dir === validDirection && (hitSL.time - (lapStartTime || startTime) > cooldownMs)) {
                         processLap(hitSL.time, 15000);
-                        s1_abs = 0; s2_abs = 0; // 新周回でリセット
+                        s1_abs = 0; s2_abs = 0;
                     }
                 }
                 // セクター判定 (方向一致 & 独立区間表示)
@@ -148,7 +156,11 @@ function parseNMEA(line) {
             }
             lastPos = cur;
         }
-        if (hasFix) document.getElementById('usbGpsBtn').classList.add('active');
+        // 位置確定(FIX)したら赤
+        if (hasFix) {
+            btn.style.background = "var(--hrc-red)";
+            btn.style.color = "#fff";
+        }
     }
 }
 
@@ -185,7 +197,7 @@ document.getElementById('startBtn').onclick = function() {
 
 document.getElementById('lapBtn').onclick = function() {
     if (swState === 1) processLap(Date.now(), 0); 
-    else if(confirm("リセットしますか？")) location.reload();
+    else location.reload(); // 停止時は即リセット
 };
 
 document.getElementById('usbGpsBtn').onclick = async function() {
@@ -202,10 +214,10 @@ document.getElementById('usbGpsBtn').onclick = async function() {
             nmeaBuffer = linesN.pop();
             linesN.forEach(parseNMEA);
         }
-    } catch (e) { document.getElementById('usbGpsBtn').classList.remove('active'); }
+    } catch (e) { this.style.background = ""; this.style.color = ""; }
 };
 
-document.getElementById('reloadBtn').onclick = () => { if(confirm("リロードしますか？")) location.reload(); };
+document.getElementById('reloadBtn').onclick = () => { if(confirm("データを破棄してリロードしますか？")) location.reload(); };
 
 document.getElementById('historyBtn').onclick = () => {
     if (lapRecords.length === 0) return;
@@ -220,7 +232,8 @@ document.getElementById('historyBtn').onclick = () => {
     const bSp = getBest('max', 'max'), bR = getBest('maxRpm', 'max');
 
     document.getElementById('history-body').innerHTML = lapRecords.map(r => {
-        return `<tr>
+        const isBestRow = r.time === bT;
+        return `<tr style="${isBestRow ? 'background: rgba(228,0,43,0.1);' : ''}">
             <td>${r.no}</td>
             <td class="${parseFloat(r.s1)===bS1?'best-lap':''}">${r.s1}</td>
             <td class="${parseFloat(r.s2)===bS2?'best-lap':''}">${r.s2}</td>
@@ -243,7 +256,8 @@ document.getElementById('gpxBtn').onclick = () => {
     const lineData = `SL:${getL('startLine')}|S1:${getL('s1Line')}|S2:${getL('s2Line')}|S3:${getL('s3Line')}`;
     let gpx = `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="KLAP"><metadata><desc>LINE_DATA[${lineData}]</desc></metadata><trk><trkseg>`;
     gpsPoints.forEach(p => {
-        gpx += `<trkpt lat="${p.lat}" lon="${p.lon}"><time>${new Date(p.time).toISOString()}</time><extensions><rpm>${Math.round(p.rpm || 0)}</rpm></extensions></trkpt>`;
+        const speedMS = (p.speed / 3.6).toFixed(2); 
+        gpx += `<trkpt lat="${p.lat}" lon="${p.lon}"><time>${new Date(p.time).toISOString()}</time><speed>${speedMS}</speed><extensions><rpm>${Math.round(p.rpm || 0)}</rpm></extensions></trkpt>`;
     });
     gpx += `</trkseg></trk></gpx>`;
     const blob = new Blob([gpx], { type: 'application/gpx+xml' });
@@ -309,6 +323,7 @@ window.onload = () => {
             if (key !== 'startLine') document.getElementById(key.replace('Line', '') + '_box').style.display = 'block';
         }
     });
+    if (!localStorage.getItem('startLineP1Lat')) document.getElementById('mapBtn').classList.add('config-missing');
     (function anim(){ drawTacho(currentRPM); requestAnimationFrame(anim); })();
 };
 </script>
