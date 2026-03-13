@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>KLAP_DEGI_USB - V10.2.0</title>
-    <link rel="manifest" href="/manifest.json">  
-
+    <title>KLAP_DEGI_USB - V10.6.0</title>
+     <link rel="manifest" href="/manifest.json">  
     <style>
         :root { --hrc-red: #E4002B; --hrc-white: #ffffff; --bg-dark: #000000; --hrc-orange: #FFA500; }
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: var(--bg-dark); color: var(--hrc-white); font-family: 'Arial Black', sans-serif; overflow: hidden; }
@@ -28,10 +27,8 @@
         footer { height: 55px; display: flex; gap: 2px; padding: 4px; background: #000; border-top: 1px solid #333; z-index: 100; position: fixed; bottom: 0; left: 0; right: 0; }
         button { flex: 1; background: #1a1a1a; color: #fff; border: 1px solid #444; border-radius: 4px; font-size: 9px; font-weight: bold; min-width: 0; cursor: pointer; }
         button.active { background: var(--hrc-red) !important; color: #fff !important; }
-        #gpxBtn { display: none; background: var(--hrc-orange); color: #000; }
-        .config-missing { background: var(--hrc-orange) !important; color: #000 !important; }
         #history-page { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.96); z-index: 2000; padding: 20px; box-sizing: border-box; overflow-y: auto; }
-        #history-table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 20px; }
+        #history-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 20px; }
         #history-table th { color: var(--hrc-red); border-bottom: 2px solid var(--hrc-red); padding: 8px; text-align: center; }
         #history-table td { padding: 8px; border-bottom: 1px solid #333; text-align: center; }
         .close-btn { background: var(--hrc-red); padding: 15px; text-align: center; font-weight: bold; border-radius: 4px; cursor: pointer; }
@@ -62,14 +59,14 @@
     <footer>
         <button id="usbGpsBtn">USB GPS</button><button id="btConnect">BLE START</button>
         <button id="startBtn">TIMER</button><button id="lapBtn">LAP/RESET</button>
-        <button id="historyBtn">HISTORY</button><button id="gpxBtn">GPX SAVE</button>
+        <button id="historyBtn">HISTORY</button><button id="gpxBtn" style="display:none; background:var(--hrc-orange); color:#000;">GPX SAVE</button>
         <button id="mapBtn" onclick="location.href='index.html'">MAP</button> 
         <button id="reloadBtn">RELOAD</button>
     </footer>
 </div>
 <div id="history-page">
     <div class="close-btn" onclick="document.getElementById('history-page').style.display='none'">CLOSE HISTORY</div>
-    <table id="history-table"><thead><tr><th>LAP</th><th>S1</th><th>S2</th><th>S3</th><th>TIME</th><th>MAX SPD</th><th>MAX RPM</th></tr></thead><tbody id="history-body"></tbody></table>
+    <table id="history-table"><thead><tr><th>LAP</th><th>S1</th><th>S2</th><th>S3</th><th>S4</th><th>TIME</th><th>MAX SPD</th><th>MAX RPM</th></tr></thead><tbody id="history-body"></tbody></table>
 </div>
 
 <script>
@@ -80,13 +77,11 @@ let currentRPM = 0, currentTemp = 0, device = null, nmeaBuffer = '', lastPos = n
 let lines = { startLine: null, s1Line: null, s2Line: null, s3Line: null };
 let currentSpeedKmh = 0, maxSpeedInLap = 0, maxRpmInLap = 0;
 let isFrozen = false, freezeDisplayTime = "", freezeUntil = 0;
-let pulsePerRev = 1, cooldownMs = 30000;
-let validDirection = null; // 最初のスタート通過時の方向
-let s1_abs = 0, s2_abs = 0; // 区間計算用
+let pulsePerRev = 1, cooldownMs = 30000, validDirection = null;
+let s1_abs = 0, s2_abs = 0, s3_abs = 0;
 
 const canvas = document.getElementById('canvas'), ctx = canvas.getContext('2d');
 
-// 予測通過(線形補間) & 方向判定
 function getIntersectionWithPredict(p1, p2, line) {
     if (!line) return null;
     const x1=p1.lon, y1=p1.lat, x2=p2.lon, y2=p2.lat, x3=line.p2.lon, y3=line.p2.lat, x4=line.p1.lon, y4=line.p1.lat;
@@ -94,25 +89,15 @@ function getIntersectionWithPredict(p1, p2, line) {
     if (Math.abs(den)<1e-12) return null;
     const t = ((x4-x3)*(y1-y3)-(y4-y3)*(x1-x3))/den;
     const u = ((x2-x1)*(y1-y3)-(y2-y1)*(x1-x3))/den;
-    if (t>=0 && t<=1 && u>=0 && u<=1) {
-        return { 
-            time: p1.time + (p2.time - p1.time) * t, 
-            dir: den > 0 ? 1 : -1 
-        };
-    }
+    if (t>=0 && t<=1 && u>=0 && u<=1) return { time: p1.time + (p2.time - p1.time) * t, dir: den > 0 ? 1 : -1 };
     return null;
 }
 
 function parseNMEA(line) {
     if (line.includes('RMC') || line.includes('GGA')) {
-        const p = line.split(',');
+        const p = line.split(','), btn = document.getElementById('usbGpsBtn');
         let hasFix = false;
-        const btn = document.getElementById('usbGpsBtn');
-        
-        // 接続されているのでオレンジ
-        btn.style.background = "var(--hrc-orange)";
-        btn.style.color = "#000";
-
+        btn.style.background = "var(--hrc-orange)"; btn.style.color = "#000";
         if (line.includes('RMC') && p[2] === 'A') {
             hasFix = true;
             currentSpeedKmh = parseFloat(p[7]) * 1.852;
@@ -123,18 +108,15 @@ function parseNMEA(line) {
             const lat = dmmToDec(p[2], p[3]), lon = dmmToDec(p[4], p[5]);
             const cur = { lat, lon, rpm: currentRPM, speed: currentSpeedKmh, time: Date.now() };
             if (swState === 1) gpsPoints.push(cur);
-            
             if (swState === 1 && lastPos) {
-                // スタートライン判定
                 const hitSL = getIntersectionWithPredict(lastPos, cur, lines.startLine);
                 if (hitSL) {
                     if (validDirection === null) validDirection = hitSL.dir;
                     if (hitSL.dir === validDirection && (hitSL.time - (lapStartTime || startTime) > cooldownMs)) {
                         processLap(hitSL.time, 15000);
-                        s1_abs = 0; s2_abs = 0;
+                        s1_abs = 0; s2_abs = 0; s3_abs = 0;
                     }
                 }
-                // セクター判定 (方向一致 & 独立区間表示)
                 if (validDirection !== null && lapStartTime > 0) {
                     const h1 = getIntersectionWithPredict(lastPos, cur, lines.s1Line);
                     if (h1 && h1.dir === validDirection && s1_abs === 0) {
@@ -143,52 +125,53 @@ function parseNMEA(line) {
                     }
                     const h2 = getIntersectionWithPredict(lastPos, cur, lines.s2Line);
                     if (h2 && h2.dir === validDirection && s1_abs > 0 && s2_abs === 0) {
-                        const cur_abs = (h2.time - lapStartTime) / 1000;
-                        s2_abs = cur_abs;
-                        document.getElementById('s2_val').textContent = (cur_abs - s1_abs).toFixed(2);
+                        const t2 = (h2.time - lapStartTime) / 1000;
+                        s2_abs = t2;
+                        document.getElementById('s2_val').textContent = (t2 - s1_abs).toFixed(2);
                     }
                     const h3 = getIntersectionWithPredict(lastPos, cur, lines.s3Line);
-                    if (h3 && h3.dir === validDirection && s2_abs > 0) {
-                        const cur_abs = (h3.time - lapStartTime) / 1000;
-                        document.getElementById('s3_val').textContent = (cur_abs - s2_abs).toFixed(2);
+                    if (h3 && h3.dir === validDirection && s2_abs > 0 && s3_abs === 0) {
+                        const t3 = (h3.time - lapStartTime) / 1000;
+                        s3_abs = t3;
+                        document.getElementById('s3_val').textContent = (t3 - s2_abs).toFixed(2);
                     }
                 }
             }
             lastPos = cur;
         }
-        // 位置確定(FIX)したら赤
-        if (hasFix) {
-            btn.style.background = "var(--hrc-red)";
-            btn.style.color = "#fff";
-        }
+        if (hasFix) { btn.style.background = "var(--hrc-red)"; btn.style.color = "#fff"; }
     }
+}
+
+function processLap(t, freezeMs) {
+    const now = t || Date.now();
+    const lapTimeMs = now - (lapStartTime || startTime);
+    const lapTimeSec = lapTimeMs / 1000;
+    let s4Val = "--.--";
+    if (s3_abs > 0) s4Val = (lapTimeSec - s3_abs).toFixed(2);
+
+    const lapData = { 
+        no: lapRecords.length + 1, time: lapTimeMs, max: Math.round(maxSpeedInLap), maxRpm: Math.round(maxRpmInLap),
+        s1: document.getElementById('s1_val').textContent, s2: document.getElementById('s2_val').textContent,
+        s3: document.getElementById('s3_val').textContent, s4: s4Val
+    };
+    lapRecords.unshift(lapData);
+    updateLapList();
+    if (freezeMs > 0) { isFrozen = true; freezeDisplayTime = timeFormat(lapTimeMs); freezeUntil = Date.now() + freezeMs; }
+    lapStartTime = now; maxSpeedInLap = 0; maxRpmInLap = 0;
+    setTimeout(() => { if(swState === 1) ['s1_val','s2_val','s3_val'].forEach(id => document.getElementById(id).textContent = "--.--"); }, 2000); 
 }
 
 function updateLapList() {
     if (lapRecords.length === 0) return;
     const bestTime = Math.min(...lapRecords.map(r => r.time));
-    document.getElementById('lap').innerHTML = lapRecords.map(r => {
-        const isBest = r.time === bestTime && lapRecords.length > 1;
-        return `<div class="lap-row ${isBest ? 'best-lap' : ''}"><span>L${r.no}</span><span>${timeFormat(r.time)}</span></div>`;
-    }).join('');
-}
-
-function processLap(t, freezeMs) {
-    const now = t || Date.now();
-    const lapTime = now - (lapStartTime || startTime);
-    const lapData = { no: lapRecords.length + 1, time: lapTime, max: Math.round(maxSpeedInLap), maxRpm: Math.round(maxRpmInLap), s1: document.getElementById('s1_val').textContent, s2: document.getElementById('s2_val').textContent, s3: document.getElementById('s3_val').textContent };
-    lapRecords.unshift(lapData);
-    updateLapList();
-    if (freezeMs > 0) { isFrozen = true; freezeDisplayTime = timeFormat(lapTime); freezeUntil = Date.now() + freezeMs; }
-    else { isFrozen = false; }
-    lapStartTime = now; maxSpeedInLap = 0; maxRpmInLap = 0;
-    ['s1_val','s2_val','s3_val'].forEach(id => document.getElementById(id).textContent = "--.--");
+    document.getElementById('lap').innerHTML = lapRecords.map(r => `<div class="lap-row ${r.time === bestTime && lapRecords.length > 1 ? 'best-lap' : ''}"><span>L${r.no}</span><span>${timeFormat(r.time)}</span></div>`).join('');
 }
 
 document.getElementById('startBtn').onclick = function() {
     if (swState !== 1) { 
-        swState = 1; startTime = Date.now(); lapStartTime = 0; lapRecords = []; gpsPoints = []; maxRpmInLap = 0;
-        validDirection = null; s1_abs = 0; s2_abs = 0;
+        swState = 1; startTime = Date.now(); lapStartTime = 0; lapRecords = []; gpsPoints = [];
+        validDirection = null; s1_abs = 0; s2_abs = 0; s3_abs = 0;
         this.classList.add('active'); document.getElementById('gpxBtn').style.display = 'none'; tick(); 
     } else { 
         swState = 2; this.classList.remove('active'); document.getElementById('gpxBtn').style.display = 'block'; 
@@ -197,81 +180,67 @@ document.getElementById('startBtn').onclick = function() {
 
 document.getElementById('lapBtn').onclick = function() {
     if (swState === 1) processLap(Date.now(), 0); 
-    else location.reload(); // 停止時は即リセット
+    else location.reload(); 
 };
 
 document.getElementById('usbGpsBtn').onclick = async function() {
     try {
-        const iface = parseInt(localStorage.getItem('usb_interface')) || 1;
-        const ep = parseInt(localStorage.getItem('usb_endpoint')) || 2;
         device = await navigator.usb.requestDevice({ filters: [] });
-        await device.open();
-        await device.selectConfiguration(1);
-        await device.claimInterface(iface);
+        await device.open(); await device.selectConfiguration(1);
+        await device.claimInterface(parseInt(localStorage.getItem('usb_interface')) || 1);
         while (device) {
-            const res = await device.transferIn(ep, 512);
+            const res = await device.transferIn(parseInt(localStorage.getItem('usb_endpoint')) || 2, 512);
             const linesN = (nmeaBuffer + new TextDecoder().decode(res.data)).split(/\r?\n/);
-            nmeaBuffer = linesN.pop();
-            linesN.forEach(parseNMEA);
+            nmeaBuffer = linesN.pop(); linesN.forEach(parseNMEA);
         }
-    } catch (e) { this.style.background = ""; this.style.color = ""; }
+    } catch (e) { this.style.background = ""; }
 };
-
-document.getElementById('reloadBtn').onclick = () => { if(confirm("データを破棄してリロードしますか？")) location.reload(); };
 
 document.getElementById('historyBtn').onclick = () => {
     if (lapRecords.length === 0) return;
-    const getBest = (key, type) => {
-        const vals = lapRecords.map(r => {
-            const v = parseFloat(r[key]);
-            return isNaN(v) ? (type === 'min' ? Infinity : -1) : v;
-        });
-        return type === 'min' ? Math.min(...vals) : Math.max(...vals);
+    const getB = (k, t) => {
+        const vs = lapRecords.map(r => { const v = parseFloat(r[k]); return isNaN(v) ? (t==='min'?Infinity:-1) : v; });
+        return t==='min' ? Math.min(...vs) : Math.max(...vs);
     };
-    const bS1 = getBest('s1', 'min'), bS2 = getBest('s2', 'min'), bS3 = getBest('s3', 'min'), bT = Math.min(...lapRecords.map(r => r.time));
-    const bSp = getBest('max', 'max'), bR = getBest('maxRpm', 'max');
-
-    document.getElementById('history-body').innerHTML = lapRecords.map(r => {
-        const isBestRow = r.time === bT;
-        return `<tr style="${isBestRow ? 'background: rgba(228,0,43,0.1);' : ''}">
+    const bS1 = getB('s1','min'), bS2 = getB('s2','min'), bS3 = getB('s3','min'), bS4 = getB('s4','min'), bT = Math.min(...lapRecords.map(r => r.time));
+    document.getElementById('history-body').innerHTML = lapRecords.map(r => `
+        <tr style="${r.time===bT?'background:rgba(228,0,43,0.1);':''}">
             <td>${r.no}</td>
             <td class="${parseFloat(r.s1)===bS1?'best-lap':''}">${r.s1}</td>
             <td class="${parseFloat(r.s2)===bS2?'best-lap':''}">${r.s2}</td>
             <td class="${parseFloat(r.s3)===bS3?'best-lap':''}">${r.s3}</td>
+            <td class="${parseFloat(r.s4)===bS4?'best-lap':''}">${r.s4}</td>
             <td class="${r.time===bT?'best-lap':''}">${timeFormat(r.time)}</td>
-            <td class="${r.max===bSp?'best-lap':''}">${r.max}</td>
-            <td class="${r.maxRpm===bR?'best-lap':''}">${r.maxRpm}</td>
-        </tr>`;
-    }).join('');
-    document.getElementById('history-page').style.display = 'block';
+            <td class="${r.max===getB('max','max')?'best-lap':''}">${r.max}</td>
+            <td class="${r.maxRpm===getB('maxRpm','max')?'best-lap':''}">${r.maxRpm}</td>
+        </tr>`).join('');
+    document.getElementById('history-page').style.display='block';
 };
 
 document.getElementById('gpxBtn').onclick = () => {
     if (gpsPoints.length === 0) return;
     const getL = (k) => {
-        const p1lat = localStorage.getItem(k + 'P1Lat'), p1lon = localStorage.getItem(k + 'P1Lon'),
-              p2lat = localStorage.getItem(k + 'P2Lat'), p2lon = localStorage.getItem(k + 'P2Lon');
-        return p1lat ? `${p1lat},${p1lon},${p2lat},${p2lon}` : "";
+        const lat1 = localStorage.getItem(k+'P1Lat'); if(!lat1) return "";
+        return `${lat1},${localStorage.getItem(k+'P1Lon')},${localStorage.getItem(k+'P2Lat')},${localStorage.getItem(k+'P2Lon')}`;
     };
-    const lineData = `SL:${getL('startLine')}|S1:${getL('s1Line')}|S2:${getL('s2Line')}|S3:${getL('s3Line')}`;
+    // S4定義を追加（解析互換性のため）
+    const lineData = `SL:${getL('startLine')}|S1:${getL('s1Line')}|S2:${getL('s2Line')}|S3:${getL('s3Line')}|S4:${getL('startLine')}`;
     let gpx = `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="KLAP"><metadata><desc>LINE_DATA[${lineData}]</desc></metadata><trk><trkseg>`;
     gpsPoints.forEach(p => {
-        const speedMS = (p.speed / 3.6).toFixed(2); 
-        gpx += `<trkpt lat="${p.lat}" lon="${p.lon}"><time>${new Date(p.time).toISOString()}</time><speed>${speedMS}</speed><extensions><rpm>${Math.round(p.rpm || 0)}</rpm></extensions></trkpt>`;
+        gpx += `<trkpt lat="${p.lat}" lon="${p.lon}"><time>${new Date(p.time).toISOString()}</time><speed>${(p.speed/3.6).toFixed(2)}</speed><extensions><rpm>${Math.round(p.rpm)}</rpm></extensions></trkpt>`;
     });
     gpx += `</trkseg></trk></gpx>`;
-    const blob = new Blob([gpx], { type: 'application/gpx+xml' });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `log_${Date.now()}.gpx`; a.click();
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([gpx], {type:'application/gpx+xml'}));
+    a.download=`log_${Date.now()}.gpx`; a.click();
+    window.alert("GPXファイルを保存しました。"); // アラート復活
 };
 
 function tick() {
     if (swState !== 1) return;
     if (currentRPM > maxRpmInLap) maxRpmInLap = Math.round(currentRPM);
-    const now = Date.now();
+    const now = Date.now(), d1 = document.getElementById('display1');
     document.getElementById('display').textContent = "TOTAL " + timeFormat(now - startTime);
-    const d1 = document.getElementById('display1');
-    if (isFrozen && now < freezeUntil) d1.textContent = freezeDisplayTime;
-    else d1.textContent = timeFormat(now - (lapStartTime || startTime));
+    d1.textContent = isFrozen && now < freezeUntil ? freezeDisplayTime : timeFormat(now - (lapStartTime || startTime));
     requestAnimationFrame(tick);
 }
 
@@ -297,18 +266,15 @@ document.getElementById('btConnect').onclick = async function() {
         const server = await ble.gatt.connect();
         const service = await server.getPrimaryService(SERVICE_UUID);
         const pC = await service.getCharacteristic(PULSE_UUID);
-        await pC.startNotifications();
-        this.classList.add('active');
+        await pC.startNotifications(); this.classList.add('active');
         pC.oncharacteristicvaluechanged = (e) => { 
-            const data = e.target.value; 
-            currentRPM = (data.getUint16(0, true) * 60) / pulsePerRev; 
-            currentTemp = data.getUint8(2); 
-            document.getElementById('temp_val').textContent = currentTemp; 
+            const data = e.target.value; currentRPM = (data.getUint16(0, true) * 60) / pulsePerRev; 
+            currentTemp = data.getUint8(2); document.getElementById('temp_val').textContent = currentTemp; 
         };
     } catch (e) { this.classList.remove('active'); }
 };
 
-function dmmToDec(d, dir){ if(!d) return 0; const dot=d.indexOf('.'); const deg=parseInt(d.substring(0,dot-2)), min=parseFloat(d.substring(dot-2)); const dec=deg+(min/60); return (dir==='S'||dir==='W')?-dec:dec; }
+function dmmToDec(d, dir){ if(!d) return 0; const dot=d.indexOf('.'); const deg=parseInt(d.substring(0,dot-2)), min=parseFloat(d.substring(dot-2)); return (dir==='S'||dir==='W')?-(deg+min/60):(deg+min/60); }
 function timeFormat(ms){ if(ms===Infinity||ms<0)return "--:--.---"; const m=Math.floor(ms/60000), s=Math.floor((ms%60000)/1000), mss=Math.floor(ms%1000); return `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}.${mss.toString().padStart(3,'0')}`; }
 
 window.onresize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight - 60; };
@@ -320,7 +286,7 @@ window.onload = () => {
         const p1Lat = localStorage.getItem(key + 'P1Lat');
         if (p1Lat) {
             lines[key] = { p1: { lat: parseFloat(p1Lat), lon: parseFloat(localStorage.getItem(key + 'P1Lon')) }, p2: { lat: parseFloat(localStorage.getItem(key + 'P2Lat')), lon: parseFloat(localStorage.getItem(key + 'P2Lon')) } };
-            if (key !== 'startLine') document.getElementById(key.replace('Line', '') + '_box').style.display = 'block';
+            document.getElementById(key.replace('Line', '') + '_box').style.display = 'block';
         }
     });
     if (!localStorage.getItem('startLineP1Lat')) document.getElementById('mapBtn').classList.add('config-missing');
