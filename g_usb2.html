@@ -270,25 +270,35 @@ function drawTacho(rpm) {
 }
 // 手動ラップボタンの処理
 document.getElementById('lapBtn').onclick = function() {
-    if (swState === 1) { 
-        // 走行中（TIMERがActive）なら手動ラップ
-        const now = Date.now();
+    if (swState === 1) {
+        // 走行中：手動ラップ実行
+        // processLapを呼ぶが、フリーズフラグを立てないように制御
+        const hitTime = Date.now();
+        const lapTimeMs = hitTime - (lapStartTime || startTime);
         
-        // クールダウン時間を無視して強制的にラップを刻む
-        processLap(now); 
+        // ラップデータの作成と保存
+        const lapData = { 
+            no: lapRecords.length + 1, 
+            time: lapTimeMs, 
+            max: Math.round(maxSpeedInLap), 
+            maxRpm: Math.round(maxRpmInLap),
+            s1: document.getElementById('s1_val').textContent,
+            s2: document.getElementById('s2_val').textContent,
+            s3: document.getElementById('s3_val').textContent,
+            s4: lastPassedSectorTime > 0 ? ((lapTimeMs/1000) - lastPassedSectorTime).toFixed(3) : "--.---"
+        };
+        lapRecords.unshift(lapData);
+        updateLapList();
+
+        // 変数リセット（フリーズ処理 isFrozen = true はスキップ）
+        lapStartTime = hitTime; 
+        maxSpeedInLap = 0; 
+        maxRpmInLap = 0;
+        s1_abs = 0; s2_abs = 0; s3_abs = 0; lastPassedSectorTime = 0;
         
-        // ボタンを押した瞬間の視覚的フィードバック（一瞬白く光らせる）
-        const originalBg = this.style.background;
-        this.style.background = "#fff";
-        this.style.color = "#000";
-        setTimeout(() => {
-            this.style.background = originalBg;
-            this.style.color = "#fff";
-        }, 150);
-        
-        console.log("Manual Lap recorded at: " + now);
+        console.log("Manual Lap Saved (No Freeze Display)");
     } else {
-        // 停止中ならリロード（リセット）
+        // 停止中：リロード
         if (confirm("データをリセットしてリロードしますか？")) {
             location.reload();
         }
