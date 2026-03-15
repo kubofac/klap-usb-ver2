@@ -268,7 +268,32 @@ function drawTacho(rpm) {
     document.getElementById('speed_val').textContent = Math.round(currentSpeedKmh);
     document.getElementById('max_speed_val').textContent = maxSpeedInLap;
 }
-
+// 手動ラップボタンの処理
+document.getElementById('lapBtn').onclick = function() {
+    if (swState === 1) { 
+        // 走行中（TIMERがActive）なら手動ラップ
+        const now = Date.now();
+        
+        // クールダウン時間を無視して強制的にラップを刻む
+        processLap(now); 
+        
+        // ボタンを押した瞬間の視覚的フィードバック（一瞬白く光らせる）
+        const originalBg = this.style.background;
+        this.style.background = "#fff";
+        this.style.color = "#000";
+        setTimeout(() => {
+            this.style.background = originalBg;
+            this.style.color = "#fff";
+        }, 150);
+        
+        console.log("Manual Lap recorded at: " + now);
+    } else {
+        // 停止中ならリロード（リセット）
+        if (confirm("データをリセットしてリロードしますか？")) {
+            location.reload();
+        }
+    }
+};
 document.getElementById('startBtn').onclick = function() {
     if (swState !== 1) {
         swState = 1; startTime = Date.now(); lapStartTime = 0; lapRecords = []; gpsPoints = [];
