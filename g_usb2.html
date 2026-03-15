@@ -83,7 +83,8 @@ let currentSpeedKmh = 0, maxSpeedInLap = 0, maxRpmInLap = 0;
 let isFrozen = false, freezeDisplayTime = "", freezeUntil = 0;
 let pulsePerRev = 1, cooldownMs = 30000, validDirection = null;
 let s1_abs = 0, s2_abs = 0, s3_abs = 0, lastPassedSectorTime = 0;
-
+// 各セクターの通過方向を個別に記憶する変数
+let sectorDirections = { s1: null, s2: null, s3: null };
 const canvas = document.getElementById('canvas'), ctx = canvas.getContext('2d');
 
 function initLines() {
@@ -126,31 +127,46 @@ function parseNMEA(line) {
     if (line.includes('GGA') && (p[6] !== '0' && p[6] !== '')) {
         fix = true;
         const cur = { lat: dmmToDec(p[2], p[3]), lon: dmmToDec(p[4], p[5]), rpm: currentRPM, speed: currentSpeedKmh, time: Date.now() };
+        
         if (swState === 1 && lastPos) {
             gpsPoints.push(cur);
-            // スタート・ゴール判定
+            
+            // --- スタート・ゴール判定 ---
             const hitSL = getIntersection(lastPos, cur, lines.startLine);
             if (hitSL) {
-                if (validDirection === null) validDirection = hitSL.dir; // 方向ロック
+                if (validDirection === null) validDirection = hitSL.dir; // SLの方向を記憶
+                
+                // SLは記憶した方向と一致する場合のみ計測
                 if (hitSL.dir === validDirection && (hitSL.time - (lapStartTime || startTime) > cooldownMs)) {
                     processLap(hitSL.time);
                 }
             }
-            // セクター判定
-            if (validDirection !== null && lapStartTime > 0) {
+            
+            // --- セクター判定 (各ライン独立した方向判定) ---
+            if (lapStartTime > 0) {
                 ['s1', 's2', 's3'].forEach(s => {
                     const hit = getIntersection(lastPos, cur, lines[s + 'Line']);
-                    if (hit && hit.dir === validDirection) {
-                        const absTime = (hit.time - lapStartTime) / 1000;
-                        if (s === 's1' && s1_abs === 0) {
-                            s1_abs = absTime; lastPassedSectorTime = absTime;
-                            document.getElementById('s1_val').textContent = s1_abs.toFixed(2);
-                        } else if (s === 's2' && s1_abs > 0 && s2_abs === 0) {
-                            s2_abs = absTime; lastPassedSectorTime = absTime;
-                            document.getElementById('s2_val').textContent = (s2_abs - s1_abs).toFixed(2);
-                        } else if (s === 's3' && s2_abs > 0 && s3_abs === 0) {
-                            s3_abs = absTime; lastPassedSectorTime = absTime;
-                            document.getElementById('s3_val').textContent = (s3_abs - s2_abs).toFixed(2);
+                    if (hit) {
+                        // そのセクターを初めて通過した時の向きを、そのセクター専用の正解として記憶
+                        if (sectorDirections[s] === null) {
+                            sectorDirections[s] = hit.dir;
+                            console.log(`${s} direction set to: ${hit.dir}`);
+                        }
+
+                        // 各セクターごとに、記憶された方向と一致するかチェック
+                        if (hit.dir === sectorDirections[s]) {
+                            const absTime = (hit.time - lapStartTime) / 1000;
+                            
+                            if (s === 's1' && s1_abs === 0) {
+                                s1_abs = absTime; lastPassedSectorTime = absTime;
+                                document.getElementById('s1_val').textContent = s1_abs.toFixed(3);
+                            } else if (s === 's2' && s2_abs === 0) {
+                                s2_abs = absTime; lastPassedSectorTime = absTime;
+                                document.getElementById('s2_val').textContent = (s1_abs > 0 ? (s2_abs - s1_abs) : s2_abs).toFixed(3);
+                            } else if (s === 's3' && s3_abs === 0) {
+                                s3_abs = absTime; lastPassedSectorTime = absTime;
+                                document.getElementById('s3_val').textContent = (s2_abs > 0 ? (s3_abs - s2_abs) : s3_abs).toFixed(3);
+                            }
                         }
                     }
                 });
@@ -166,29 +182,45 @@ function processLap(hitTime) {
     const lapTimeMs = hitTime - (lapStartTime || startTime);
     const lapTimeSec = lapTimeMs / 1000;
     
-    // S4算出: 最後に計測されたセクターからゴールまで
-    let s4 = lastPassedSectorTime > 0 ? (lapTimeSec - lastPassedSectorTime).toFixed(2) : "--.--";
+    // S4算出: 最後に通過したセクターからゴールラインまで
+    let s4 = lastPassedSectorTime > 0 ? (lapTimeSec - lastPassedSectorTime).toFixed(3) : "--.---";
 
     const lapData = { 
-        no: lapRecords.length + 1, time: lapTimeMs, 
-        max: Math.round(maxSpeedInLap), maxRpm: Math.round(maxRpmInLap),
+        no: lapRecords.length + 1, 
+        time: lapTimeMs, 
+        max: Math.round(maxSpeedInLap), 
+        maxRpm: Math.round(maxRpmInLap),
         s1: document.getElementById('s1_val').textContent,
         s2: document.getElementById('s2_val').textContent,
         s3: document.getElementById('s3_val').textContent,
         s4: s4
     };
+    
     lapRecords.unshift(lapData);
     updateLapList();
 
-    // フリーズ表示設定
-    isFrozen = true; freezeDisplayTime = timeFormat(lapTimeMs); freezeUntil = Date.now() + 15000;
+    // 画面中央にタイムを大きくフリーズ表示
+    isFrozen = true; 
+    freezeDisplayTime = timeFormat(lapTimeMs); 
+    freezeUntil = Date.now() + 10000; 
     
-    lapStartTime = hitTime; maxSpeedInLap = 0; maxRpmInLap = 0;
-    s1_abs = 0; s2_abs = 0; s3_abs = 0; lastPassedSectorTime = 0;
+    // 変数のリセット
+    lapStartTime = hitTime; 
+    maxSpeedInLap = 0; 
+    maxRpmInLap = 0;
+    s1_abs = 0; 
+    s2_abs = 0; 
+    s3_abs = 0; 
+    lastPassedSectorTime = 0;
     
+    // 3秒後にダッシュボード上の各セクター表示をクリア
     setTimeout(() => { 
-        if(swState === 1) ['s1_val','s2_val','s3_val'].forEach(id => document.getElementById(id).textContent = "--.--"); 
-    }, 2000);
+        if(swState === 1) {
+            ['s1_val','s2_val','s3_val'].forEach(id => {
+                document.getElementById(id).textContent = "--.---";
+            });
+        }
+    }, 3000);
 }
 
 function updateLapList() {
