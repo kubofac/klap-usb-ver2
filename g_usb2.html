@@ -105,12 +105,25 @@ function initLines() {
 
 function getIntersection(p1, p2, line) {
     if (!line) return null;
-    const x1=p1.lon, y1=p1.lat, x2=p2.lon, y2=p2.lat, x3=line.p2.lon, y3=line.p2.lat, x4=line.p1.lon, y4=line.p1.lat;
-    const den = (y4-y3)*(x2-x1)-(x4-x3)*(y2-y1);
-    if (Math.abs(den)<1e-12) return null;
-    const t = ((x4-x3)*(y1-y3)-(y4-y3)*(x1-x3))/den;
-    const u = ((x2-x1)*(y1-y3)-(y2-y1)*(x1-x3))/den;
-    if (t>=0 && t<=1 && u>=0 && u<=1) return { time: p1.time + (p2.time - p1.time) * t, dir: den > 0 ? 1 : -1 };
+    const x1 = p1.lon, y1 = p1.lat, x2 = p2.lon, y2 = p2.lat;
+    const x3 = line.p1.lon, y3 = line.p1.lat, x4 = line.p2.lon, y4 = line.p2.lat;
+
+    const den = (y4 - y3) * (x2 - x1) - (x4 - x3) * (y2 - y1);
+    if (Math.abs(den) < 1e-12) return null; // 平行
+
+    const t = ((x4 - x3) * (y1 - y3) - (y4 - y3) * (x1 - x3)) / den; // 自車軌跡上の比率
+    const u = ((x2 - x1) * (y1 - y3) - (y2 - y1) * (x1 - x3)) / den; // ライン上の比率
+
+    // tが0〜1ならこのGPS周期で跨いでいる。uは少し遊び（-0.2〜1.2）を持たせて取りこぼしを防ぐ
+    if (t >= 0 && t <= 1 && u >= -0.2 && u <= 1.2) {
+        // 方向判定（外積）
+        const Lx = x4 - x3, Ly = y4 - y3, Vx = x2 - x1, Vy = y2 - y1;
+        const crossProduct = (Lx * Vy) - (Ly * Vx);
+        const direction = crossProduct > 0 ? 1 : -1;
+
+        // 精密な補間時刻を計算
+        return { time: p1.time + (p2.time - p1.time) * t, dir: direction };
+    }
     return null;
 }
 
@@ -349,46 +362,68 @@ document.getElementById('historyBtn').onclick = function() {
 
 document.getElementById('gpxBtn').onclick = () => {
     if (gpsPoints.length === 0) return;
-    
-    const getL = (k) => {
-        const p1Lat = localStorage.getItem(k+'P1Lat'); if(!p1Lat) return "";
-        return `${p1Lat},${localStorage.getItem(k+'P1Lon')},${localStorage.getItem(k+'P2Lat')},${localStorage.getItem(k+'P2Lon')}`;
-    };
-    
-    const lineData = `SL:${getL('startLine')}|S1:${getL('s1Line')}|S2:${getL('s2Line')}|S3:${getL('s3Line')}|S4:SKIP`;
-    
-    // 💡 解析ソフト互換のヘッダー定義
-    let gpx = `<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="KLAP" xmlns="http://www.topografix.com/GPX/1/1" xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v1">
-<metadata><desc>LINE_DATA[${lineData}]</desc></metadata>
-<trk><name>Race Session</name><trkseg>`;
 
-    // 💡 最初の地点を0秒とするための基準
+    // スタートライン・セクターラインの座標情報をメタデータに埋め込む（解析時に便利）
+    const getL = (k) => {
+        const p1Lat = localStorage.getItem(k + 'P1Lat');
+        if (!p1Lat) return "";
+        return `${p1Lat},${localStorage.getItem(k + 'P1Lon')},${localStorage.getItem(k + 'P2Lat')},${localStorage.getItem(k + 'P2Lon')}`;
+    };
+    const lineData = `SL:${getL('startLine')}|S1:${getL('s1Line')}|S2:${getL('s2Line')}|S3:${getL('s3Line')}`;
+
+    // GPXヘッダーの構築
+    let gpx = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="KLAP_DEGI" xmlns="http://www.topografix.com/GPX/1/1" xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v1">
+<metadata>
+    <name>Race Session ${new Date().toLocaleString()}</name>
+    <desc>LINE_DATA[${lineData}]</desc>
+</metadata>
+<trk>
+  <name>Race Log</name>
+  <trkseg>`;
+
+    // 💡 重要：最初の記録地点の時刻をセッションの基準点（0秒）とする
     const baseStartTime = gpsPoints[0].time;
 
+    // 各GPSポイントをトラックポイントとして書き出し
     gpsPoints.forEach(p => {
-        // 💡 相対時刻（2000年1月1日 00:00:00を基準にする）に変換
+        // 💡 2000年1月1日 00:00:00 UTC (946684800000ms) を基準に経過時間を加算
+        // これにより、実際のGPS時刻に依存せず、解析ソフトが「0秒から始まった走行」として認識できる
         const relativeTime = new Date(946684800000 + (p.time - baseStartTime)).toISOString();
-        const speedMS = (p.speed / 3.6).toFixed(2);
+        
+        const speedMS = (p.speed / 3.6).toFixed(2); // km/hからm/sへ変換
         const rpm = Math.round(p.rpm || 0);
+        const temp = p.temp || 0;
 
-        gpx += `\n<trkpt lat="${p.lat}" lon="${p.lon}">
-  <time>${relativeTime}</time>
-  <speed>${speedMS}</speed>
-  <extensions>
-    <gpxtpx:TrackPointExtension>
-      <gpxtpx:hr>${rpm}</gpxtpx:hr>
-    </gpxtpx:TrackPointExtension>
-  </extensions>
-</trkpt>`;
+        gpx += `
+    <trkpt lat="${p.lat}" lon="${p.lon}">
+      <time>${relativeTime}</time>
+      <speed>${speedMS}</speed>
+      <extensions>
+        <gpxtpx:TrackPointExtension>
+          <gpxtpx:hr>${rpm}</gpxtpx:hr>
+          <gpxtpx:atemp>${temp}</gpxtpx:atemp>
+        </gpxtpx:TrackPointExtension>
+      </extensions>
+    </trkpt>`;
     });
 
-    gpx += `\n</trkseg></trk></gpx>`;
-    
-    const a = document.createElement('a'); 
-    a.href = URL.createObjectURL(new Blob([gpx], {type:'application/gpx+xml'}));
-    a.download = `log_${Date.now()}.gpx`; 
+    gpx += `
+  </trkseg>
+</trk>
+</gpx>`;
+
+    // ファイル保存処理
+    const blob = new Blob([gpx], { type: 'application/gpx+xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `RaceLog_${Date.now()}.gpx`;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
     window.alert("解析ソフト互換形式でGPXを保存しました。");
 };
 
