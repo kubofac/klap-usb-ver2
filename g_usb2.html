@@ -15,14 +15,42 @@
         #display1 { font-size: 18vh; font-weight: 900; line-height: 0.9; color: var(--hrc-white); text-shadow: 4px 4px 15px #000; }
         #sector-container { display: flex; justify-content: flex-end; gap: 15px; font-size: 3vh; font-weight: 900; height: 3.5vh; }
         .sec-box { display: none; text-shadow: 2px 2px 10px #000; color: #fff; }
-        .right-panels { display: flex; flex-direction: row; gap: 15px; height: 100%; align-items: flex-start; }
+        /* 右側のパネル全体の並び */
+        .right-panels { 
+            display: flex; 
+            flex-direction: row; 
+            gap: 15px; 
+            height: 100%; 
+            align-items: flex-start; 
+        }
         #lap-panel { width: 175px; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
         #lap { flex: 1; overflow-y: auto; scrollbar-width: none; }
         .lap-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 18px; font-weight: 900; }
         .best-lap { color: var(--hrc-red) !important; } 
-        .data-panel { display: flex; flex-direction: column; gap: 15px; width: 110px; }
-        .val { font-size: 40px; font-weight: 900; line-height: 0.9; text-shadow: 2px 2px 8px #000; }
-        .label { font-size: 11px; color: var(--hrc-red); font-weight: bold; }
+       /* データパネル（SPEED等）を右寄せにする設定 */
+        .data-panel { 
+            display: flex; 
+            flex-direction: column; 
+            gap: 15px; 
+            width: 110px;
+            align-items: flex-end; /* 子要素を右側に寄せる */
+        }
+      .val { 
+            font-size: 40px; 
+            font-weight: 900; 
+            line-height: 0.9; 
+            text-shadow: 2px 2px 8px #000;
+            text-align: right;       /* 数値を右寄せ */
+            width: 100%;
+        }
+
+        .label { 
+            font-size: 11px; 
+            color: var(--hrc-red); 
+            font-weight: bold; 
+            text-align: right;      /* ラベルも右寄せ */
+            width: 100%;
+        }
         footer { height: 55px; display: flex; gap: 2px; padding: 4px; background: #000; border-top: 1px solid #333; z-index: 100; position: fixed; bottom: 0; left: 0; right: 0; }
         button { flex: 1; background: #1a1a1a; color: #fff; border: 1px solid #444; border-radius: 4px; font-size: 9px; font-weight: bold; min-width: 0; cursor: pointer; transition: 0.2s; }
         button.active { background: var(--hrc-red) !important; color: #fff !important; }
