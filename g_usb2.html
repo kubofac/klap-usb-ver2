@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>KLAP_DEGI_USB - V10.6.3</title>
+    <title>KLAP_DEGI_USB - V10.6.3_Turbo</title>
     <style>
         :root { --hrc-red: #E4002B; --hrc-white: #ffffff; --bg-dark: #000000; --hrc-orange: #FFA500; --hrc-blue: #004098; }
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: var(--bg-dark); color: var(--hrc-white); font-family: 'Arial Black', sans-serif; overflow: hidden; }
@@ -89,12 +89,12 @@ const canvas = document.getElementById('canvas'), ctx = canvas.getContext('2d');
 let bleDevice = null;
 let wakeLock = null;
 
-// --- 1. BLE接続・再接続コアロジック ---
+// --- 1. BLE接続・爆速再接続コアロジック ---
 async function connectToBleDevice() {
     if (!bleDevice) return;
 
     try {
-        console.log("Connecting to GATT...");
+        console.log("Attempting to connect...");
         const server = await bleDevice.gatt.connect();
         const service = await server.getPrimaryService(SERVICE_UUID);
         const characteristic = await service.getCharacteristic(PULSE_UUID);
@@ -109,37 +109,37 @@ async function connectToBleDevice() {
             document.getElementById('temp_val').textContent = currentTemp;
         };
 
-        // 切断イベント監視
+        // イベントリスナーの重複登録防止
         bleDevice.removeEventListener('gattserverdisconnected', onDisconnected);
         bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
         
-        console.log("BLE Connected.");
-        requestWakeLock(); // 接続成功時に画面スリープ防止
+        console.log("BLE Connected Successfully.");
+        requestWakeLock(); // 画面スリープ防止
 
     } catch (error) {
-        console.error("BLE Connect Error:", error);
-        // 失敗しても2秒後に再試行
-        setTimeout(connectToBleDevice, 2000);
+        console.warn("Connect failed, retrying in 500ms...", error);
+        // ★爆速リトライ：失敗しても0.5秒後に即試行
+        setTimeout(connectToBleDevice, 500);
     }
 }
 
 function onDisconnected() {
-    console.warn("BLE Disconnected! Retrying...");
+    console.error("BLE Disconnected! Instant retry triggered.");
     document.getElementById('btConnect').classList.remove('active');
+    // ★爆速リトライ：切断検知から0.5秒後に再接続
     setTimeout(connectToBleDevice, 500);
 }
 
 document.getElementById('btConnect').onclick = async function() {
     try {
         if (!bleDevice) {
-            // ここでフィルタリングすることで、ESP32側のaddServiceUUIDと合致したものだけをリストに出す
             bleDevice = await navigator.bluetooth.requestDevice({
                 filters: [{ services: [SERVICE_UUID] }]
             });
         }
         await connectToBleDevice();
     } catch (e) {
-        console.log("BLE Selection Canceled");
+        console.log("User cancelled device selection");
     }
 };
 
@@ -150,11 +150,11 @@ async function requestWakeLock() {
             wakeLock = await navigator.wakeLock.request('screen');
         }
     } catch (err) {
-        console.error(`${err.name}, ${err.message}`);
+        console.error(`WakeLock Error: ${err.message}`);
     }
 }
 
-// --- 以下、既存のGPS・タイマーロジック (変更なし) ---
+// --- GPS・タイマーロジック (変更なし) ---
 
 function initLines() {
     ['startLine', 's1Line', 's2Line', 's3Line'].forEach(key => {
