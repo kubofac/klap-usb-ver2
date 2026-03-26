@@ -126,7 +126,7 @@ async function connectToBleDevice() {
 function onDisconnected() {
     console.warn("BLE Disconnected! Retrying...");
     document.getElementById('btConnect').classList.remove('active');
-    setTimeout(connectToBleDevice, 2000);
+    setTimeout(connectToBleDevice, 500);
 }
 
 document.getElementById('btConnect').onclick = async function() {
