@@ -296,58 +296,78 @@ function mainLoop() {
 }
 
 function drawTacho(rpm) {
+    // キャンバスの初期化
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const w = canvas.width, h = canvas.height, segments = 75;
-    const active = Math.floor((rpm / 14000) * segments); // 現在の回転数
-    const sX = 20, hY = 80, bY = h - 20, rad = bY - hY, curveEnd = 30;
+    
+    const w = canvas.width;
+    const h = canvas.height;
+    const segments = 75; // バーの分割数
+    const active = Math.floor((rpm / 14000) * segments); // 現在の回転数に対応するセグメント位置
+    
+    // レイアウト設定
+    const sX = 20;       // 開始X座標
+    const hY = 80;       // 直線部分のY座標
+    const bY = h - 20;   // 曲線部分の底辺Y座標
+    const rad = bY - hY; // 曲線の半径
+    const curveEnd = 30; // 曲線から直線に切り替わるセグメント番号
 
     for (let i = 0; i <= segments; i++) {
         let x, y, ang, prog;
+        
+        // --- 1. 座標と角度の計算 ---
         if (i <= curveEnd) { 
-            prog = i/curveEnd; ang = Math.PI + (prog*(Math.PI/2)); 
-            x = sX+rad+Math.cos(ang)*rad; y = hY+rad+Math.sin(ang)*rad; 
+            // 曲線（円弧）部分
+            prog = i / curveEnd; 
+            ang = Math.PI + (prog * (Math.PI / 2)); 
+            x = sX + rad + Math.cos(ang) * rad; 
+            y = hY + rad + Math.sin(ang) * rad; 
         } else { 
-            prog = (i-curveEnd)/(segments-curveEnd); 
-            x = (sX+rad)+(prog*(w-15-(sX+rad))); y = hY; ang = 1.5*Math.PI; 
+            // 直線部分
+            prog = (i - curveEnd) / (segments - curveEnd); 
+            x = (sX + rad) + (prog * (w - 15 - (sX + rad))); 
+            y = hY; 
+            ang = 1.5 * Math.PI; 
         }
 
-        // --- ★ご希望の色判定に修正★ ---
-        let color = "#222"; // 未到達セグメント（暗いグレー）
+        // --- 2. 色の判定（3色出し分けロジック） ---
+        let color = "#222"; // デフォルト（未到達部分のグレー）
         
         if (i < active) {
-            // そのセグメント自体の「位置（RPM）」を計算して色を決める
-            const segmentRpm = (i / segments) * 14000;
+            // 現在の回転数（active）より手前のセグメントに色をつける
+            const segmentRpm = (i / segments) * 14000; // このセグメントが表すRPM
             
             if (segmentRpm >= 10500) {
-                color = "var(--hrc-red)";   // 10500以上：赤 (HRC RED)
+                color = "var(--hrc-red)";   // 10500rpm以上：赤 (HRC RED)
             } else if (segmentRpm >= 6000) {
-                color = "var(--hrc-blue)";  // 6000以上：青 (HRC BLUE)
+                color = "var(--hrc-blue)";  // 6000rpm以上：青 (HRC BLUE)
             } else {
                 color = "#fff";             // それ未満：白
             }
         }
-        // ---------------------------------
 
-        // 目盛り（数字）の描画（変更なし）
+        // --- 3. 目盛り数字の描画（1000rpm単位） ---
         if (i % 10 === 0 || i === segments) { 
             ctx.save(); 
-            ctx.fillStyle = i < active ? "#fff" : "#444"; 
+            ctx.fillStyle = i <= active ? "#fff" : "#444"; 
             ctx.font = "italic bold 22px Arial"; 
             ctx.textAlign = "center"; 
-            ctx.fillText(Math.round((i/segments)*14), x+Math.cos(ang)*45, y+Math.sin(ang)*45); 
+            // 数字を外側に配置
+            ctx.fillText(Math.round((i/segments)*14), x + Math.cos(ang)*45, y + Math.sin(ang)*45); 
             ctx.restore(); 
         }
 
-        // バーの描画（変更なし）
+        // --- 4. バー（セグメント）本体の描画 ---
         if (i < segments) {
             ctx.fillStyle = color; 
             ctx.save(); 
             ctx.translate(x, y); 
-            ctx.rotate(ang + Math.PI/2); 
-            ctx.fillRect(-5, -23, 10, 46); 
+            ctx.rotate(ang + Math.PI / 2); // 進行方向に対して垂直に描画
+            ctx.fillRect(-5, -23, 10, 46); // セグメントの太さと長さ
             ctx.restore();
         }
     }
+
+    // デジタル数値の更新
     document.getElementById('rpm_val').textContent = Math.floor(rpm);
     document.getElementById('speed_val').textContent = Math.round(currentSpeedKmh);
     document.getElementById('max_speed_val').textContent = maxSpeedInLap;
