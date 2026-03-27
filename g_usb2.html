@@ -311,24 +311,24 @@ function drawTacho(rpm) {
             x = (sX+rad)+(prog*(w-15-(sX+rad))); y = hY; ang = 1.5*Math.PI; 
         }
 
-        // --- 色判定の修正 ---
+        // --- ★ご希望の色判定に修正★ ---
         let color = "#222"; // 未到達セグメント（暗いグレー）
         
         if (i < active) {
-            // そのセグメント自体の「位置（RPM）」で色を決める
+            // そのセグメント自体の「位置（RPM）」を計算して色を決める
             const segmentRpm = (i / segments) * 14000;
             
-            if (segmentRpm >= 12500) {
-                color = "var(--hrc-red)";   // 12500以上は赤
-            } else if (segmentRpm >= 8000) {
-                color = "var(--hrc-blue)";  // 8000〜12499は青
+            if (segmentRpm >= 10500) {
+                color = "var(--hrc-red)";   // 10500以上：赤 (HRC RED)
+            } else if (segmentRpm >= 6000) {
+                color = "var(--hrc-blue)";  // 6000以上：青 (HRC BLUE)
             } else {
-                color = "#fff";             // それ以下は白
+                color = "#fff";             // それ未満：白
             }
         }
-        // ------------------
+        // ---------------------------------
 
-        // 目盛り（数字）の描画
+        // 目盛り（数字）の描画（変更なし）
         if (i % 10 === 0 || i === segments) { 
             ctx.save(); 
             ctx.fillStyle = i < active ? "#fff" : "#444"; 
@@ -338,7 +338,7 @@ function drawTacho(rpm) {
             ctx.restore(); 
         }
 
-        // バーの描画
+        // バーの描画（変更なし）
         if (i < segments) {
             ctx.fillStyle = color; 
             ctx.save(); 
@@ -350,7 +350,7 @@ function drawTacho(rpm) {
     }
     document.getElementById('rpm_val').textContent = Math.floor(rpm);
     document.getElementById('speed_val').textContent = Math.round(currentSpeedKmh);
-    document.getElementById('max_speed_val').textContent = maxSpeedInLap;
+    document.getElementById('max_speed_val').textContent = maxSpeedInLap);
 }
 
 document.getElementById('lapBtn').onclick = function() {
