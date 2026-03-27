@@ -296,78 +296,62 @@ function mainLoop() {
 }
 
 function drawTacho(rpm) {
-    // キャンバスの初期化
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const w = canvas.width, h = canvas.height, segments = 75;
     
-    const w = canvas.width;
-    const h = canvas.height;
-    const segments = 75; // バーの分割数
-    const active = Math.floor((rpm / 14000) * segments); // 現在の回転数に対応するセグメント位置
-    
-    // レイアウト設定
-    const sX = 20;       // 開始X座標
-    const hY = 80;       // 直線部分のY座標
-    const bY = h - 20;   // 曲線部分の底辺Y座標
-    const rad = bY - hY; // 曲線の半径
-    const curveEnd = 30; // 曲線から直線に切り替わるセグメント番号
+    // 現在の回転数が全75セグメント中、どこまで到達しているか (0〜75)
+    const activeThreshold = (rpm / 14000) * segments; 
 
-    for (let i = 0; i <= segments; i++) {
+    const sX = 20, hY = 80, bY = h - 20, rad = bY - hY, curveEnd = 30;
+
+    for (let i = 0; i < segments; i++) {
         let x, y, ang, prog;
-        
-        // --- 1. 座標と角度の計算 ---
         if (i <= curveEnd) { 
-            // 曲線（円弧）部分
-            prog = i / curveEnd; 
-            ang = Math.PI + (prog * (Math.PI / 2)); 
-            x = sX + rad + Math.cos(ang) * rad; 
-            y = hY + rad + Math.sin(ang) * rad; 
+            prog = i/curveEnd; ang = Math.PI + (prog*(Math.PI/2)); 
+            x = sX+rad+Math.cos(ang)*rad; y = hY+rad+Math.sin(ang)*rad; 
         } else { 
-            // 直線部分
-            prog = (i - curveEnd) / (segments - curveEnd); 
-            x = (sX + rad) + (prog * (w - 15 - (sX + rad))); 
-            y = hY; 
-            ang = 1.5 * Math.PI; 
+            prog = (i-curveEnd)/(segments-curveEnd); 
+            x = (sX+rad)+(prog*(w-15-(sX+rad))); y = hY; ang = 1.5*Math.PI; 
         }
 
-        // --- 2. 色の判定（3色出し分けロジック） ---
-        let color = "#222"; // デフォルト（未到達部分のグレー）
-        
-        if (i < active) {
-            // 現在の回転数（active）より手前のセグメントに色をつける
-            const segmentRpm = (i / segments) * 14000; // このセグメントが表すRPM
+        // --- 色判定ロジックの再構築 ---
+        let color = "#222"; // 未到達（背景色）
+
+        // 現在のインデックス i が、現在の回転数(activeThreshold)より下なら色を塗る
+        if (i < activeThreshold) {
+            const currentSegmentRpm = (i / segments) * 14000;
             
-            if (segmentRpm >= 10500) {
-                color = "var(--hrc-red)";   // 10500rpm以上：赤 (HRC RED)
-            } else if (segmentRpm >= 6000) {
-                color = "var(--hrc-blue)";  // 6000rpm以上：青 (HRC BLUE)
+            if (currentSegmentRpm >= 10500) {
+                color = "#E4002B"; // HRC Red (直接指定)
+            } else if (currentSegmentRpm >= 6000) {
+                color = "#004098"; // HRC Blue (直接指定)
             } else {
-                color = "#fff";             // それ未満：白
+                color = "#ffffff"; // White
             }
         }
 
-        // --- 3. 目盛り数字の描画（1000rpm単位） ---
-        if (i % 10 === 0 || i === segments) { 
+        // バーの描画
+        ctx.fillStyle = color; 
+        ctx.save(); 
+        ctx.translate(x, y); 
+        ctx.rotate(ang + Math.PI/2); 
+        ctx.fillRect(-5, -23, 10, 46); 
+        ctx.restore();
+
+        // 目盛り（数字）の描画（10セグメントごと）
+        if (i % 10 === 0 || i === segments - 1) { 
             ctx.save(); 
-            ctx.fillStyle = i <= active ? "#fff" : "#444"; 
+            ctx.fillStyle = (i < activeThreshold) ? "#fff" : "#444"; 
             ctx.font = "italic bold 22px Arial"; 
             ctx.textAlign = "center"; 
-            // 数字を外側に配置
-            ctx.fillText(Math.round((i/segments)*14), x + Math.cos(ang)*45, y + Math.sin(ang)*45); 
+            const labelX = x + Math.cos(ang) * 45;
+            const labelY = y + Math.sin(ang) * 45;
+            ctx.fillText(Math.round((i/segments)*14), labelX, labelY); 
             ctx.restore(); 
-        }
-
-        // --- 4. バー（セグメント）本体の描画 ---
-        if (i < segments) {
-            ctx.fillStyle = color; 
-            ctx.save(); 
-            ctx.translate(x, y); 
-            ctx.rotate(ang + Math.PI / 2); // 進行方向に対して垂直に描画
-            ctx.fillRect(-5, -23, 10, 46); // セグメントの太さと長さ
-            ctx.restore();
         }
     }
 
-    // デジタル数値の更新
+    // 数値表示の更新
     document.getElementById('rpm_val').textContent = Math.floor(rpm);
     document.getElementById('speed_val').textContent = Math.round(currentSpeedKmh);
     document.getElementById('max_speed_val').textContent = maxSpeedInLap;
