@@ -391,18 +391,57 @@ document.getElementById('historyBtn').onclick = function() {
 
 document.getElementById('gpxBtn').onclick = () => {
     if (gpsPoints.length === 0) return;
-    const getL = (k) => { const p1Lat = localStorage.getItem(k + 'P1Lat'); if (!p1Lat) return ""; return `${p1Lat},${localStorage.getItem(k + 'P1Lon')},${localStorage.getItem(k + 'P2Lat')},${localStorage.getItem(k + 'P2Lon')}`; };
+
+    // ライン情報の取得（MAP等との連携用）
+    const getL = (k) => { 
+        const p1Lat = localStorage.getItem(k + 'P1Lat'); 
+        if (!p1Lat) return ""; 
+        return `${p1Lat},${localStorage.getItem(k + 'P1Lon')},${localStorage.getItem(k + 'P2Lat')},${localStorage.getItem(k + 'P2Lon')}`; 
+    };
     const lineData = `SL:${getL('startLine')}|S1:${getL('s1Line')}|S2:${getL('s2Line')}|S3:${getL('s3Line')}`;
-    let gpx = `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="KLAP_DEGI" xmlns="http://www.topografix.com/GPX/1/1" xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v1"><metadata><name>Session ${new Date().toLocaleString()}</name><desc>LINE_DATA[${lineData}]</desc></metadata><trk><name>Race Log</name><trkseg>`;
-    const baseStartTime = gpsPoints[0].time;
+    
+    // GPXヘッダー：標準的な定義のみ
+    let gpx = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="KLAP_DEGI" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata>
+    <time>${new Date().toISOString()}</time>
+    <desc>LINE_DATA[${lineData}]</desc>
+  </metadata>
+  <trk>
+    <name>RaceLog_${new Date().toLocaleString()}</name>
+    <trkseg>`;
+
+    // ポイントの書き出し（時刻を「今日」に、速度のみを記録）
     gpsPoints.forEach(p => {
-        const relativeTime = new Date(946684800000 + (p.time - baseStartTime)).toISOString();
-        gpx += `<trkpt lat="${p.lat}" lon="${p.lon}"><time>${relativeTime}</time><speed>${(p.speed / 3.6).toFixed(2)}</speed><extensions><gpxtpx:TrackPointExtension><gpxtpx:hr>${Math.round(p.rpm || 0)}</gpxtpx:hr><gpxtpx:atemp>${p.temp || 0}</gpxtpx:atemp></gpxtpx:TrackPointExtension></extensions></trkpt>`;
+        const timeISO = new Date(p.time).toISOString(); // 1970年や2000年ではなく「今日」
+        const speedMS = (p.speed / 3.6).toFixed(2);
+        
+        gpx += `
+      <trkpt lat="${p.lat}" lon="${p.lon}">
+        <time>${timeISO}</time>
+        <speed>${speedMS}</speed>
+      </trkpt>`;
     });
-    gpx += `</trkseg></trk></gpx>`;
+
+    gpx += `
+    </trkseg>
+  </trk>
+</gpx>`;
+
+    // 保存処理
     const blob = new Blob([gpx], { type: 'application/gpx+xml' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = `RaceLog_${Date.now()}.gpx`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    const a = document.createElement('a');
+    const now = new Date();
+    // ファイル名を「年月日_時分」にして管理しやすく
+    const fileName = `RaceLog_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}.gpx`;
+    
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
 };
 
 function dmmToDec(d, dir){ if(!d) return 0; const dot=d.indexOf('.'); const deg=parseInt(d.substring(0,dot-2)), min=parseFloat(d.substring(dot-2)); return (dir==='S'||dir==='W')?-(deg+min/60):(deg+min/60); }
