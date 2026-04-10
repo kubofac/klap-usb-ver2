@@ -291,6 +291,23 @@ document.getElementById('clearAllLines').onclick = () => {
             const uif = localStorage.getItem('usb_interface');
             if (uif) document.getElementById('usbStatus').textContent = "保存済み (IF:" + uif + ")";
         };
+ 
+    
+    if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      // service-worker.js のパスが正しいか確認してください
+      navigator.serviceWorker.register('./service-worker.js')
+        .then(reg => console.log('SW Registered!', reg))
+        .catch(err => console.log('SW Register Failed!', err));
+    });
+  }
+    
+    
+    
+    
+    
+    
+    
     </script>
 </body>
 </html>
