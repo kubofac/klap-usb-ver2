@@ -10,6 +10,16 @@ const urlsToCache = [
   // 画像やJavaScriptファイルなど、アプリを構成するすべての静的ファイルをここに追加
   '/circuit_data.js', // 設定ツールで使われるファイル
   // その他のCSSやJSファイルなど
+
+'https://unpkg.com/leaflet@1.7.1/dist/leaflet.js',
+  'https://unpkg.com/leaflet@1.7.1/dist/leaflet.css',
+  'https://cdn.jsdelivr.net/npm/chart.js'
+
+
+
+
+
+  
 ];
 
 // インストールイベント: キャッシュにファイルを保存
