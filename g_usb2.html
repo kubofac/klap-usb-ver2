@@ -448,6 +448,17 @@ function dmmToDec(d, dir){ if(!d) return 0; const dot=d.indexOf('.'); const deg=
 function timeFormat(ms){ if(ms<0) ms=0; const m=Math.floor(ms/60000), s=Math.floor((ms%60000)/1000), ms2=Math.floor(ms%1000); return `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}.${ms2.toString().padStart(3,'0')}`; }
 
 window.onload = () => { canvas.width = canvas.clientWidth; canvas.height = canvas.clientHeight; initLines(); mainLoop(); };
+
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      // service-worker.js のパスが正しいか確認してください
+      navigator.serviceWorker.register('./service-worker.js')
+        .then(reg => console.log('SW Registered!', reg))
+        .catch(err => console.log('SW Register Failed!', err));
+    });
+  }
+
+    
 </script>
 </body>
 </html>
