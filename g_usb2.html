@@ -392,7 +392,7 @@ document.getElementById('historyBtn').onclick = function() {
 document.getElementById('gpxBtn').onclick = () => {
     if (gpsPoints.length === 0) return;
 
-    // ライン情報の取得（MAP等との連携用）
+    // localStorageからライン情報を取得（MAPとの共有用）
     const getL = (k) => { 
         const p1Lat = localStorage.getItem(k + 'P1Lat'); 
         if (!p1Lat) return ""; 
@@ -400,9 +400,11 @@ document.getElementById('gpxBtn').onclick = () => {
     };
     const lineData = `SL:${getL('startLine')}|S1:${getL('s1Line')}|S2:${getL('s2Line')}|S3:${getL('s3Line')}`;
     
-    // GPXヘッダー：標準的な定義のみ
+    // GPXヘッダー：Garminの拡張スキーマ(v1)を定義してRPMを格納できるようにする
     let gpx = `<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="KLAP_DEGI" xmlns="http://www.topografix.com/GPX/1/1">
+<gpx version="1.1" creator="KLAP_DEGI" 
+  xmlns="http://www.topografix.com/GPX/1/1"
+  xmlns:v1="http://www.garmin.com/xmlschemas/TrackPointExtension/v1">
   <metadata>
     <time>${new Date().toISOString()}</time>
     <desc>LINE_DATA[${lineData}]</desc>
@@ -411,15 +413,21 @@ document.getElementById('gpxBtn').onclick = () => {
     <name>RaceLog_${new Date().toLocaleString()}</name>
     <trkseg>`;
 
-    // ポイントの書き出し（時刻を「今日」に、速度のみを記録）
+    // 各計測ポイントの書き出し
     gpsPoints.forEach(p => {
-        const timeISO = new Date(p.time).toISOString(); // 1970年や2000年ではなく「今日」
+        const timeISO = new Date(p.time).toISOString();
         const speedMS = (p.speed / 3.6).toFixed(2);
+        const rpmVal = Math.round(p.rpm || 0);
         
         gpx += `
       <trkpt lat="${p.lat}" lon="${p.lon}">
         <time>${timeISO}</time>
         <speed>${speedMS}</speed>
+        <extensions>
+          <v1:TrackPointExtension>
+            <v1:cad>${rpmVal}</v1:cad>
+          </v1:TrackPointExtension>
+        </extensions>
       </trkpt>`;
     });
 
@@ -428,12 +436,13 @@ document.getElementById('gpxBtn').onclick = () => {
   </trk>
 </gpx>`;
 
-    // 保存処理
+    // Blobを作成してダウンロード実行
     const blob = new Blob([gpx], { type: 'application/gpx+xml' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     const now = new Date();
-    // ファイル名を「年月日_時分」にして管理しやすく
+    
+    // ファイル名：RaceLog_20240412_1830.gpx のような形式
     const fileName = `RaceLog_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}.gpx`;
     
     a.href = url;
