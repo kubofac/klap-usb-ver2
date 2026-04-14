@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "app.vercel.klap_usb_ver2.twa",
+        "sha256_cert_fingerprints": ["C9:B9:68:64:07:39:DE:98:49:0F:20:6A:D1:16:68:B8:A4:34:05:7E:74:1D:60:88:4D:27:46:19:DD:74:90:F1"]
+      }
+    }]
