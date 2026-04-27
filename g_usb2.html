@@ -277,12 +277,35 @@ function processLap(hitTime) {
     const lapTimeMs = hitTime - (lapStartTime || startTime);
     const lapTimeSec = lapTimeMs / 1000;
     let s4 = lastPassedSectorTime > 0 ? (lapTimeSec - lastPassedSectorTime).toFixed(3) : "--.---";
-    const lapData = { no: lapRecords.length + 1, time: lapTimeMs, max: Math.round(maxSpeedInLap), maxRpm: Math.round(maxRpmInLap), s1: document.getElementById('s1_val').textContent, s2: document.getElementById('s2_val').textContent, s3: document.getElementById('s3_val').textContent, s4: s4 };
+    
+    const lapData = { 
+        no: lapRecords.length + 1, 
+        time: lapTimeMs, 
+        max: Math.round(maxSpeedInLap), 
+        maxRpm: Math.round(maxRpmInLap), // ★ここを確認
+        s1: document.getElementById('s1_val').textContent, 
+        s2: document.getElementById('s2_val').textContent, 
+        s3: document.getElementById('s3_val').textContent, 
+        s4: s4 
+    };
+    
     lapRecords.unshift(lapData);
     updateLapList();
-    isFrozen = true; freezeDisplayTime = timeFormat(lapTimeMs); freezeUntil = Date.now() + 15000;
-    lapStartTime = hitTime; maxSpeedInLap = 0; maxRpmInLap = 0; s1_abs = 0; s2_abs = 0; s3_abs = 0; lastPassedSectorTime = 0;
-    setTimeout(() => { if(swState === 1) { ['s1_val','s2_val','s3_val'].forEach(id => { document.getElementById(id).textContent = "--.---"; }); } }, 3000);
+    
+    isFrozen = true; 
+    freezeDisplayTime = timeFormat(lapTimeMs); 
+    freezeUntil = Date.now() + 15000;
+    
+    lapStartTime = hitTime; 
+    maxSpeedInLap = 0; 
+    maxRpmInLap = 0; // ★リセット
+    s1_abs = 0; s2_abs = 0; s3_abs = 0; lastPassedSectorTime = 0;
+
+    setTimeout(() => { 
+        if(swState === 1) { 
+            ['s1_val','s2_val','s3_val'].forEach(id => { document.getElementById(id).textContent = "--.---"; }); 
+        } 
+    }, 3000);
 }
 
 function updateLapList() {
@@ -375,11 +398,32 @@ function drawTacho(rpm) {
 
 document.getElementById('lapBtn').onclick = function() {
     if (swState === 1) {
-        const hitTime = Date.now(); const lapTimeMs = hitTime - (lapStartTime || startTime);
-        const lapData = { no: lapRecords.length + 1, time: lapTimeMs, max: Math.round(maxSpeedInLap), maxRpm: Math.round(maxRpmInLap), s1: document.getElementById('s1_val').textContent, s2: document.getElementById('s2_val').textContent, s3: document.getElementById('s3_val').textContent, s4: lastPassedSectorTime > 0 ? ((lapTimeMs/1000) - lastPassedSectorTime).toFixed(3) : "--.---" };
-        lapRecords.unshift(lapData); updateLapList();
-        lapStartTime = hitTime; maxSpeedInLap = 0; maxRpmInLap = 0; s1_abs = 0; s2_abs = 0; s3_abs = 0; lastPassedSectorTime = 0;
-    } else if (confirm("リセットしてリロードしますか？")) { location.reload(); }
+        const hitTime = Date.now(); 
+        const lapTimeMs = hitTime - (lapStartTime || startTime);
+        
+        // 履歴用データ作成
+        const lapData = { 
+            no: lapRecords.length + 1, 
+            time: lapTimeMs, 
+            max: Math.round(maxSpeedInLap), 
+            maxRpm: Math.round(maxRpmInLap), // ★ここが maxRpmInLap になっているか確認
+            s1: document.getElementById('s1_val').textContent, 
+            s2: document.getElementById('s2_val').textContent, 
+            s3: document.getElementById('s3_val').textContent, 
+            s4: lastPassedSectorTime > 0 ? ((lapTimeMs/1000) - lastPassedSectorTime).toFixed(3) : "--.---" 
+        };
+        
+        lapRecords.unshift(lapData); 
+        updateLapList();
+        
+        // ラップ終了後のリセット処理
+        lapStartTime = hitTime; 
+        maxSpeedInLap = 0; 
+        maxRpmInLap = 0; // ★次のラップのためにリセット
+        s1_abs = 0; s2_abs = 0; s3_abs = 0; lastPassedSectorTime = 0;
+    } else if (confirm("リセットしてリロードしますか？")) { 
+        location.reload(); 
+    }
 };
 
 document.getElementById('startBtn').onclick = function() {
