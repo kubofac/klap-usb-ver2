@@ -105,6 +105,8 @@
 const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b", PULSE_UUID = "f4deb353-a4cf-4ffb-badb-2a5f2e3bb630";
 let swState = 0, startTime = 0, lapStartTime = 0, lapRecords = [], gpsPoints = [];
 let currentRPM = 0, currentTemp = 0, device = null, nmeaBuffer = '', lastPos = null;
+    let targetRPM = 0;    // ESP32から届いた最新の目標値
+let displayedRPM = 0; // 画面に表示するための「じわじわ動く」値
 let lines = { startLine: null, s1Line: null, s2Line: null, s3Line: null };
 let currentSpeedKmh = 0, maxSpeedInLap = 0, maxRpmInLap = 0;
 let isFrozen = false, freezeDisplayTime = "", freezeUntil = 0;
@@ -130,12 +132,17 @@ async function connectToBleDevice() {
         await characteristic.startNotifications();
         document.getElementById('btConnect').classList.add('active');
 
-        characteristic.oncharacteristicvaluechanged = (e) => {
-            const data = e.target.value;
-            currentRPM = (data.getUint16(0, true) * 60) / pulsePerRev;
-            currentTemp = data.getUint8(2);
-            document.getElementById('temp_val').textContent = currentTemp;
-        };
+       characteristic.oncharacteristicvaluechanged = (e) => {
+    const data = e.target.value;
+    // 最新の回転数を「目標値」として保存
+    targetRPM = (data.getUint16(0, true) * 60) / pulsePerRev;
+    
+    currentTemp = data.getUint8(2);
+    document.getElementById('temp_val').textContent = currentTemp;
+
+    // GPX記録用には「最新値」を即座に反映
+    currentRPM = targetRPM; 
+};
 
         // イベントリスナーの重複登録防止
         bleDevice.removeEventListener('gattserverdisconnected', onDisconnected);
@@ -286,12 +293,21 @@ function updateLapList() {
 
 function mainLoop() {
     const now = Date.now();
+    
+    // ★追記：表示値を目標値へ20%ずつ近づける（滑らかアニメーション）
+    displayedRPM += (targetRPM - displayedRPM) * 0.2; 
+
     if (swState === 1) {
-        if (currentRPM > maxRpmInLap) maxRpmInLap = Math.round(currentRPM);
+        // 最高回転数の判定は、補完前の「targetRPM」で行うのが正確
+        if (targetRPM > maxRpmInLap) maxRpmInLap = Math.round(targetRPM);
+        
         document.getElementById('display').textContent = "TOTAL " + timeFormat(now - startTime);
         document.getElementById('display1').textContent = (isFrozen && now < freezeUntil) ? freezeDisplayTime : timeFormat(now - (lapStartTime || startTime));
     }
-    drawTacho(currentRPM);
+    
+    // ★修正：描画には補完した「displayedRPM」を渡す
+    drawTacho(displayedRPM);
+    
     requestAnimationFrame(mainLoop);
 }
 
