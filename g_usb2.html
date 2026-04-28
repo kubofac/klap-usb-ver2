@@ -93,7 +93,10 @@
 </div>
 
 <div id="history-page">
-    <div class="close-btn" onclick="document.getElementById('history-page').style.display='none'">CLOSE HISTORY</div>
+   <div class="close-btn" onclick="
+    document.getElementById('history-page').style.display='none';
+    document.getElementById('historyBtn').classList.remove('active');
+">CLOSE HISTORY</div>
     <table id="history-table">
         <thead><tr><th>LAP</th><th>S1</th><th>S2</th><th>S3</th><th>S4</th><th>TIME</th><th>MAX SPD</th><th>MAX RPM</th></tr></thead>
         <tbody id="history-body"></tbody>
