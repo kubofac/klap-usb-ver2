@@ -211,18 +211,20 @@ function initLines() {
 }
 
 function getIntersection(p1, p2, line) {
-    if (!line) return null;
-    const x1 = p1.lon, y1 = p1.lat, x2 = p2.lon, y2 = p2.lat;
-    const x3 = line.p1.lon, y3 = line.p1.lat, x4 = line.p2.lon, y4 = line.p2.lat;
-    const den = (y4 - y3) * (x2 - x1) - (x4 - x3) * (y2 - y1);
-    if (Math.abs(den) < 1e-12) return null;
-    const t = ((x4 - x3) * (y1 - y3) - (y4 - y3) * (x1 - x3)) / den;
-    const u = ((x2 - x1) * (y1 - y3) - (y2 - y1) * (x1 - x3)) / den;
-    if (t >= 0 && t <= 1 && u >= -0.2 && u <= 1.2) {
-        const Lx = x4 - x3, Ly = y4 - y3, Vx = x2 - x1, Vy = y2 - y1;
-        const crossProduct = (Lx * Vy) - (Ly * Vx);
-        const direction = crossProduct > 0 ? 1 : -1;
-        return { time: p1.time + (p2.time - p1.time) * t, dir: direction };
+    const det = (p2.lat - p1.lat) * (line.p1.lon - line.p2.lon) - (p2.lon - p1.lon) * (line.p1.lat - line.p2.lat);
+    if (Math.abs(det) < 1e-10) return null;
+
+    const t = ((line.p1.lat - p1.lat) * (line.p1.lon - line.p2.lon) - (line.p1.lon - p1.lon) * (line.p1.lat - line.p2.lat)) / det;
+    const u = -((p2.lat - p1.lat) * (line.p1.lon - p1.lon) - (p2.lon - p1.lon) * (line.p1.lat - p1.lat)) / det;
+
+    if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {
+        // P1とP2の間の時間を、距離の比率tで精密に補完
+        const hitTime = p1.time + (p2.time - p1.time) * t;
+        return {
+            lat: p1.lat + (p2.lat - p1.lat) * t,
+            lon: p1.lon + (p2.lon - p1.lon) * t,
+            time: hitTime // これが予測通過時刻
+        };
     }
     return null;
 }
@@ -231,84 +233,92 @@ function parseNMEA(line) {
     if (!line.includes('RMC') && !line.includes('GGA')) return;
     const p = line.split(','), btn = document.getElementById('usbGpsBtn');
     let fix = false;
+
     if (line.includes('RMC') && p[2] === 'A') {
         fix = true;
         currentSpeedKmh = parseFloat(p[7]) * 1.852;
         if (currentSpeedKmh > maxSpeedInLap) maxSpeedInLap = Math.round(currentSpeedKmh);
     }
+
     if (line.includes('GGA') && (p[6] !== '0' && p[6] !== '')) {
         fix = true;
-        const cur = { lat: dmmToDec(p[2], p[3]), lon: dmmToDec(p[4], p[5]), rpm: currentRPM || 0, speed: currentSpeedKmh || 0, time: Date.now() };
+        const cur = { 
+            lat: dmmToDec(p[2], p[3]), 
+            lon: dmmToDec(p[4], p[5]), 
+            rpm: currentRPM || 0, 
+            speed: currentSpeedKmh || 0, 
+            time: Date.now() 
+        };
+
         if (swState === 1 && lastPos) {
             gpsPoints.push(cur);
+
+            // --- コントロールライン判定 ---
             const hitSL = getIntersection(lastPos, cur, lines.startLine);
             if (hitSL) {
                 if (validDirection === null) validDirection = hitSL.dir;
+                // V10.6.1思想: 前回の予測通過時刻(lapStartTime)からの経過時間で判定
                 if (hitSL.dir === validDirection && (hitSL.time - (lapStartTime || startTime) > cooldownMs)) {
                     processLap(hitSL.time);
                 }
             }
+
+            // --- セクター判定 ---
             if (lapStartTime > 0) {
-                ['s1', 's2', 's3'].forEach(s => {
+                ['s1', 's2', 's3'].forEach((s, index) => {
+                    const sectorNum = index + 1; // 1, 2, 3 を動的に生成
                     const hit = getIntersection(lastPos, cur, lines[s + 'Line']);
+                    
                     if (hit) {
-                        if (sectorDirections[s] === null) sectorDirections[s] = hit.dir;
-                        if (hit.dir === sectorDirections[s]) {
-                            const absTime = (hit.time - lapStartTime) / 1000;
-                            if (s === 's1' && s1_abs === 0) {
-                                s1_abs = absTime; lastPassedSectorTime = absTime;
-                                document.getElementById('s1_val').textContent = s1_abs.toFixed(3);
-                            } else if (s === 's2' && s2_abs === 0) {
-                                s2_abs = absTime; lastPassedSectorTime = absTime;
-                                document.getElementById('s2_val').textContent = (s1_abs > 0 ? (s2_abs - s1_abs) : s2_abs).toFixed(3);
-                            } else if (s === 's3' && s3_abs === 0) {
-                                s3_abs = absTime; lastPassedSectorTime = absTime;
-                                document.getElementById('s3_val').textContent = (s2_abs > 0 ? (s3_abs - s2_abs) : s3_abs).toFixed(3);
-                            }
+                        // V10.6.1思想: 受信時刻(Date.now)ではなく、線形補間された予測通過時刻(hit.time)を使用
+                        const sectorAbsTime = (hit.time - lapStartTime) / 1000;
+                        const sectorRelTime = sectorAbsTime - lastPassedSectorTime;
+
+                        // 画面表示への反映 (S1: 12.345 形式)
+                        const valElement = document.getElementById(`s${sectorNum}_val`);
+                        if (valElement) {
+                            valElement.textContent = sectorRelTime.toFixed(3);
                         }
+
+                        // 次のセクター計算のための基準値を更新
+                        lastPassedSectorTime = sectorAbsTime;
                     }
                 });
             }
         }
         lastPos = cur;
     }
+
+    // GPS受信状態のインジケーター表示
     btn.style.background = fix ? "var(--hrc-red)" : "var(--hrc-orange)";
     btn.style.color = fix ? "#fff" : "#000";
 }
 
 function processLap(hitTime) {
-    const lapTimeMs = hitTime - (lapStartTime || startTime);
-    const lapTimeSec = lapTimeMs / 1000;
-    let s4 = lastPassedSectorTime > 0 ? (lapTimeSec - lastPassedSectorTime).toFixed(3) : "--.---";
-    
-    const lapData = { 
-        no: lapRecords.length + 1, 
-        time: lapTimeMs, 
-        max: Math.round(maxSpeedInLap), 
-        maxRpm: Math.round(maxRpmInLap), // ★ここを確認
-        s1: document.getElementById('s1_val').textContent, 
-        s2: document.getElementById('s2_val').textContent, 
-        s3: document.getElementById('s3_val').textContent, 
-        s4: s4 
-    };
-    
-    lapRecords.unshift(lapData);
-    updateLapList();
-    
-    isFrozen = true; 
-    freezeDisplayTime = timeFormat(lapTimeMs); 
-    freezeUntil = Date.now() + 15000;
-    
-    lapStartTime = hitTime; 
-    maxSpeedInLap = 0; 
-    maxRpmInLap = 0; // ★リセット
-    s1_abs = 0; s2_abs = 0; s3_abs = 0; lastPassedSectorTime = 0;
+    const now = Date.now();
+    // コントロールライン通過時のクールダウン（誤検知防止）
+    if (lapStartTime && (hitTime - lapStartTime < 30000)) return; 
 
-    setTimeout(() => { 
-        if(swState === 1) { 
-            ['s1_val','s2_val','s3_val'].forEach(id => { document.getElementById(id).textContent = "--.---"; }); 
-        } 
-    }, 3000);
+    if (lapStartTime) {
+        // GPS受信ラグを排除した「予測時刻同士」の差分でタイムを確定
+        const lapTimeMs = hitTime - lapStartTime;
+        const lapTimeSec = (lapTimeMs / 1000).toFixed(3);
+        
+        // 履歴への保存処理
+        saveLapHistory(lapTimeSec, hitTime); 
+        
+        // ベストラップ判定
+        if (bestLapTime === null || parseFloat(lapTimeSec) < bestLapTime) {
+            bestLapTime = parseFloat(lapTimeSec);
+        }
+    }
+
+    // ★重要: lapStartTimeをGPS受信した「今」ではなく、予測された「hitTime」で同期
+    lapStartTime = hitTime; 
+    
+    // セクター計測のリセット
+    lastPassedSectorTime = 0;
+    currentSector = 1; 
 }
 
 function updateLapList() {
