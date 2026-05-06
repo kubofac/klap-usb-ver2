@@ -116,6 +116,7 @@ let isFrozen = false, freezeDisplayTime = "", freezeUntil = 0;
 let pulsePerRev = 1, cooldownMs = 30000, validDirection = null;
 let s1_abs = 0, s2_abs = 0, s3_abs = 0, lastPassedSectorTime = 0;
 let sectorDirections = { s1: null, s2: null, s3: null };
+let bestLapTime = null;    
 const canvas = document.getElementById('canvas'), ctx = canvas.getContext('2d');
 
 // BLE & Wake Lock グローバル変数
@@ -306,29 +307,51 @@ function parseNMEA(line) {
 }
 function processLap(hitTime) {
     const now = Date.now();
-    // コントロールライン通過時のクールダウン（誤検知防止）
-    if (lapStartTime && (hitTime - lapStartTime < 30000)) return; 
+    
+    // クールダウンチェック（30秒は長すぎる可能性があるため、cooldownMs変数を使用）
+    if (lapStartTime && (hitTime - lapStartTime < cooldownMs)) return; 
 
     if (lapStartTime) {
-        // GPS受信ラグを排除した「予測時刻同士」の差分でタイムを確定
         const lapTimeMs = hitTime - lapStartTime;
         const lapTimeSec = (lapTimeMs / 1000).toFixed(3);
         
-        // 履歴への保存処理
-        saveLapHistory(lapTimeSec, hitTime); 
+        // 履歴保存用のオブジェクト作成
+        const lapData = { 
+            no: lapRecords.length + 1, 
+            time: lapTimeMs, 
+            max: Math.round(maxSpeedInLap), 
+            maxRpm: Math.round(maxRpmInLap),
+            s1: document.getElementById('s1_val').textContent, 
+            s2: document.getElementById('s2_val').textContent, 
+            s3: document.getElementById('s3_val').textContent, 
+            s4: lastPassedSectorTime > 0 ? ((lapTimeMs/1000) - lastPassedSectorTime).toFixed(3) : "--.---" 
+        };
         
+        lapRecords.unshift(lapData);
+        updateLapList();
+
+        // ★V12ロジック：15秒間表示を固定する
+        isFrozen = true;
+        freezeUntil = now + 15000; // 15秒間
+        freezeDisplayTime = timeFormat(lapTimeMs);
+
         // ベストラップ判定
         if (bestLapTime === null || parseFloat(lapTimeSec) < bestLapTime) {
             bestLapTime = parseFloat(lapTimeSec);
         }
     }
 
-    // ★重要: lapStartTimeをGPS受信した「今」ではなく、予測された「hitTime」で同期
+    // 次のラップへの準備
     lapStartTime = hitTime; 
-    
-    // セクター計測のリセット
+    maxSpeedInLap = 0; 
+    maxRpmInLap = 0; 
     lastPassedSectorTime = 0;
-    currentSector = 1; 
+    
+    // セクター表示のリセット
+    ['s1_val', 's2_val', 's3_val'].forEach(id => {
+        const el = document.getElementById(id);
+        if(el) el.textContent = "--.---";
+    });
 }
 
 function updateLapList() {
