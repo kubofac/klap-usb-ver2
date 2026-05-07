@@ -112,7 +112,17 @@ let pulsePerRev = 1, cooldownMs = 30000, validDirection = null;
 let s1_abs = 0, s2_abs = 0, s3_abs = 0, lastPassedSectorTime = 0;
 let sectorDirections = { s1: null, s2: null, s3: null };
 const canvas = document.getElementById('canvas'), ctx = canvas.getContext('2d');
-
+function parseNmeaTime(timeStr) {
+    if (!timeStr || timeStr.length < 6) return Date.now();
+    const h = parseInt(timeStr.substring(0, 2));
+    const m = parseInt(timeStr.substring(2, 4));
+    const s = parseFloat(timeStr.substring(4));
+    
+    const now = new Date();
+    // UTCでセット（GPS時刻は通常UTCのため）
+    now.setUTCHours(h, m, 0, 0); 
+    return now.getTime() + (s * 1000);
+}
 // BLE & Wake Lock グローバル変数
 let bleDevice = null;
 let wakeLock = null;
@@ -202,17 +212,35 @@ function initLines() {
 
 function getIntersection(p1, p2, line) {
     if (!line) return null;
+
     const x1 = p1.lon, y1 = p1.lat, x2 = p2.lon, y2 = p2.lat;
     const x3 = line.p1.lon, y3 = line.p1.lat, x4 = line.p2.lon, y4 = line.p2.lat;
+
     const den = (y4 - y3) * (x2 - x1) - (x4 - x3) * (y2 - y1);
     if (Math.abs(den) < 1e-12) return null;
+
+    // t: p1からp2の間でラインを横切るタイミング (0.0〜1.0)
     const t = ((x4 - x3) * (y1 - y3) - (y4 - y3) * (x1 - x3)) / den;
+    // u: ライン上のどの位置を通過したか (0.0〜1.0)
     const u = ((x2 - x1) * (y1 - y3) - (y2 - y1) * (x1 - x3)) / den;
+
+    // 判定条件：tが0〜1の間なら「GPS更新間隔の間に通過した」ということ
+    // uの遊び(-0.2〜1.2)はコース幅の判定。少し広めに取るのが実戦的
     if (t >= 0 && t <= 1 && u >= -0.2 && u <= 1.2) {
         const Lx = x4 - x3, Ly = y4 - y3, Vx = x2 - x1, Vy = y2 - y1;
         const crossProduct = (Lx * Vy) - (Ly * Vx);
         const direction = crossProduct > 0 ? 1 : -1;
-        return { time: p1.time + (p2.time - p1.time) * t, dir: direction };
+
+        // --- V12コア：時間軸の線形補完 ---
+        // GPSの点間（例: 100ms）を、通過比率 t で割る
+        const deltaTime = p2.time - p1.time;
+        const preciseTime = p1.time + (deltaTime * t);
+
+        return { 
+            time: preciseTime, 
+            dir: direction,
+            ratio: t 
+        };
     }
     return null;
 }
@@ -221,29 +249,52 @@ function parseNMEA(line) {
     if (!line.includes('RMC') && !line.includes('GGA')) return;
     const p = line.split(','), btn = document.getElementById('usbGpsBtn');
     let fix = false;
+
+    // --- RMC: 速度と修正フラグの確認 ---
     if (line.includes('RMC') && p[2] === 'A') {
         fix = true;
         currentSpeedKmh = parseFloat(p[7]) * 1.852;
         if (currentSpeedKmh > maxSpeedInLap) maxSpeedInLap = Math.round(currentSpeedKmh);
     }
+
+    // --- GGA: 座標と精密時刻(V12)の取得 ---
     if (line.includes('GGA') && (p[6] !== '0' && p[6] !== '')) {
         fix = true;
-        const cur = { lat: dmmToDec(p[2], p[3]), lon: dmmToDec(p[4], p[5]), rpm: currentRPM || 0, speed: currentSpeedKmh || 0, time: Date.now() };
+        
+        // V12修正: Date.now()を廃止し、NMEA内のUTC時刻を使用
+        const gpsTime = parseNmeaTime(p[1]);
+
+        const cur = { 
+            lat: dmmToDec(p[2], p[3]), 
+            lon: dmmToDec(p[4], p[5]), 
+            rpm: currentRPM || 0, 
+            speed: currentSpeedKmh || 0, 
+            time: gpsTime 
+        };
+
         if (swState === 1 && lastPos) {
             gpsPoints.push(cur);
+
+            // V12補間ロジックによる交差判定
             const hitSL = getIntersection(lastPos, cur, lines.startLine);
             if (hitSL) {
                 if (validDirection === null) validDirection = hitSL.dir;
-                if (hitSL.dir === validDirection && (hitSL.time - (lapStartTime || startTime) > cooldownMs)) {
+                
+                // クールダウン判定も精密化された時刻(hitSL.time)で行う
+                const currentLapTime = hitSL.time - (lapStartTime || startTime);
+                if (hitSL.dir === validDirection && (currentLapTime > cooldownMs)) {
                     processLap(hitSL.time);
                 }
             }
+
+            // セクター判定 (ここもhitSL.timeを使用することでV12化)
             if (lapStartTime > 0) {
                 ['s1', 's2', 's3'].forEach(s => {
                     const hit = getIntersection(lastPos, cur, lines[s + 'Line']);
                     if (hit) {
                         if (sectorDirections[s] === null) sectorDirections[s] = hit.dir;
                         if (hit.dir === sectorDirections[s]) {
+                            // V12補正済みの時間でセクタータイムを計算
                             const absTime = (hit.time - lapStartTime) / 1000;
                             if (s === 's1' && s1_abs === 0) {
                                 s1_abs = absTime; lastPassedSectorTime = absTime;
@@ -392,8 +443,6 @@ document.getElementById('historyBtn').onclick = function() {
 document.getElementById('gpxBtn').onclick = () => {
     if (gpsPoints.length === 0) return;
 
-    // ライン情報の取得（MAP等との連携用）
-    // localStorageからライン情報を取得（MAPとの共有用）
     const getL = (k) => { 
         const p1Lat = localStorage.getItem(k + 'P1Lat'); 
         if (!p1Lat) return ""; 
@@ -401,10 +450,8 @@ document.getElementById('gpxBtn').onclick = () => {
     };
     const lineData = `SL:${getL('startLine')}|S1:${getL('s1Line')}|S2:${getL('s2Line')}|S3:${getL('s3Line')}`;
 
-    // GPXヘッダー：標準的な定義のみ
-    // GPXヘッダー：Garminの拡張スキーマ(v1)を定義してRPMを格納できるようにする
+    // GPXヘッダー：Garmin拡張(v1)を定義
     let gpx = `<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="KLAP_DEGI" xmlns="http://www.topografix.com/GPX/1/1">
 <gpx version="1.1" creator="KLAP_DEGI" 
   xmlns="http://www.topografix.com/GPX/1/1"
   xmlns:v1="http://www.garmin.com/xmlschemas/TrackPointExtension/v1">
@@ -416,10 +463,8 @@ document.getElementById('gpxBtn').onclick = () => {
     <name>RaceLog_${new Date().toLocaleString()}</name>
     <trkseg>`;
 
-    // ポイントの書き出し（時刻を「今日」に、速度のみを記録）
-    // 各計測ポイントの書き出し
+    // ポイントの書き出し
     gpsPoints.forEach(p => {
-        const timeISO = new Date(p.time).toISOString(); // 1970年や2000年ではなく「今日」
         const timeISO = new Date(p.time).toISOString();
         const speedMS = (p.speed / 3.6).toFixed(2);
         const rpmVal = Math.round(p.rpm || 0);
@@ -441,15 +486,10 @@ document.getElementById('gpxBtn').onclick = () => {
   </trk>
 </gpx>`;
 
-    // 保存処理
-    // Blobを作成してダウンロード実行
     const blob = new Blob([gpx], { type: 'application/gpx+xml' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     const now = new Date();
-    // ファイル名を「年月日_時分」にして管理しやすく
-    
-    // ファイル名：RaceLog_20240412_1830.gpx のような形式
     const fileName = `RaceLog_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}.gpx`;
 
     a.href = url;
@@ -459,7 +499,6 @@ document.getElementById('gpxBtn').onclick = () => {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 };
-
 function dmmToDec(d, dir){ if(!d) return 0; const dot=d.indexOf('.'); const deg=parseInt(d.substring(0,dot-2)), min=parseFloat(d.substring(dot-2)); return (dir==='S'||dir==='W')?-(deg+min/60):(deg+min/60); }
 function timeFormat(ms){ if(ms<0) ms=0; const m=Math.floor(ms/60000), s=Math.floor((ms%60000)/1000), ms2=Math.floor(ms%1000); return `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}.${ms2.toString().padStart(3,'0')}`; }
 
