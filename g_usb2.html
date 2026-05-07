@@ -93,10 +93,7 @@
 </div>
 
 <div id="history-page">
-   <div class="close-btn" onclick="
-    document.getElementById('history-page').style.display='none';
-    document.getElementById('historyBtn').classList.remove('active');
-">CLOSE HISTORY</div>
+    <div class="close-btn" onclick="document.getElementById('history-page').style.display='none'">CLOSE HISTORY</div>
     <table id="history-table">
         <thead><tr><th>LAP</th><th>S1</th><th>S2</th><th>S3</th><th>S4</th><th>TIME</th><th>MAX SPD</th><th>MAX RPM</th></tr></thead>
         <tbody id="history-body"></tbody>
@@ -108,15 +105,12 @@
 const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b", PULSE_UUID = "f4deb353-a4cf-4ffb-badb-2a5f2e3bb630";
 let swState = 0, startTime = 0, lapStartTime = 0, lapRecords = [], gpsPoints = [];
 let currentRPM = 0, currentTemp = 0, device = null, nmeaBuffer = '', lastPos = null;
-    let targetRPM = 0;    // ESP32から届いた最新の目標値
-let displayedRPM = 0; // 画面に表示するための「じわじわ動く」値
 let lines = { startLine: null, s1Line: null, s2Line: null, s3Line: null };
 let currentSpeedKmh = 0, maxSpeedInLap = 0, maxRpmInLap = 0;
 let isFrozen = false, freezeDisplayTime = "", freezeUntil = 0;
 let pulsePerRev = 1, cooldownMs = 30000, validDirection = null;
 let s1_abs = 0, s2_abs = 0, s3_abs = 0, lastPassedSectorTime = 0;
 let sectorDirections = { s1: null, s2: null, s3: null };
-let bestLapTime = null;    
 const canvas = document.getElementById('canvas'), ctx = canvas.getContext('2d');
 
 // BLE & Wake Lock グローバル変数
@@ -132,26 +126,21 @@ async function connectToBleDevice() {
         const server = await bleDevice.gatt.connect();
         const service = await server.getPrimaryService(SERVICE_UUID);
         const characteristic = await service.getCharacteristic(PULSE_UUID);
-        
+
         await characteristic.startNotifications();
         document.getElementById('btConnect').classList.add('active');
 
-       characteristic.oncharacteristicvaluechanged = (e) => {
-    const data = e.target.value;
-    // 最新の回転数を「目標値」として保存
-    targetRPM = (data.getUint16(0, true) * 60) / pulsePerRev;
-    
-    currentTemp = data.getUint8(2);
-    document.getElementById('temp_val').textContent = currentTemp;
-
-    // GPX記録用には「最新値」を即座に反映
-    currentRPM = targetRPM; 
-};
+        characteristic.oncharacteristicvaluechanged = (e) => {
+            const data = e.target.value;
+            currentRPM = (data.getUint16(0, true) * 60) / pulsePerRev;
+            currentTemp = data.getUint8(2);
+            document.getElementById('temp_val').textContent = currentTemp;
+        };
 
         // イベントリスナーの重複登録防止
         bleDevice.removeEventListener('gattserverdisconnected', onDisconnected);
         bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
-        
+
         console.log("BLE Connected Successfully.");
         requestWakeLock(); // 画面スリープ防止
 
@@ -213,28 +202,17 @@ function initLines() {
 
 function getIntersection(p1, p2, line) {
     if (!line) return null;
-    const det = (p2.lat - p1.lat) * (line.p1.lon - line.p2.lon) - (p2.lon - p1.lon) * (line.p1.lat - line.p2.lat);
-    if (Math.abs(det) < 1e-10) return null;
-
-    const t = ((line.p1.lat - p1.lat) * (line.p1.lon - line.p2.lon) - (line.p1.lon - p1.lon) * (line.p1.lat - line.p2.lat)) / det;
-    const u = -((p2.lat - p1.lat) * (line.p1.lon - p1.lon) - (p2.lon - p1.lon) * (line.p1.lat - line.p1.lat)) / det;
-
-    if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {
-        const hitTime = p1.time + (p2.time - p1.time) * t;
-        
-        // --- 方向判定（外積計算） ---
-        const Lx = line.p2.lat - line.p1.lat;
-        const Ly = line.p2.lon - line.p1.lon;
-        const Vx = p2.lat - p1.lat;
-        const Vy = p2.lon - p1.lon;
-        const dir = ((Lx * Vy) - (Ly * Vx) > 0 ? 1 : -1);
-
-        return {
-            lat: p1.lat + (p2.lat - p1.lat) * t,
-            lon: p1.lon + (p2.lon - p1.lon) * t,
-            time: hitTime,
-            dir: dir // 算出した方向を返す
-        };
+    const x1 = p1.lon, y1 = p1.lat, x2 = p2.lon, y2 = p2.lat;
+    const x3 = line.p1.lon, y3 = line.p1.lat, x4 = line.p2.lon, y4 = line.p2.lat;
+    const den = (y4 - y3) * (x2 - x1) - (x4 - x3) * (y2 - y1);
+    if (Math.abs(den) < 1e-12) return null;
+    const t = ((x4 - x3) * (y1 - y3) - (y4 - y3) * (x1 - x3)) / den;
+    const u = ((x2 - x1) * (y1 - y3) - (y2 - y1) * (x1 - x3)) / den;
+    if (t >= 0 && t <= 1 && u >= -0.2 && u <= 1.2) {
+        const Lx = x4 - x3, Ly = y4 - y3, Vx = x2 - x1, Vy = y2 - y1;
+        const crossProduct = (Lx * Vy) - (Ly * Vx);
+        const direction = crossProduct > 0 ? 1 : -1;
+        return { time: p1.time + (p2.time - p1.time) * t, dir: direction };
     }
     return null;
 }
@@ -243,58 +221,40 @@ function parseNMEA(line) {
     if (!line.includes('RMC') && !line.includes('GGA')) return;
     const p = line.split(','), btn = document.getElementById('usbGpsBtn');
     let fix = false;
-
     if (line.includes('RMC') && p[2] === 'A') {
         fix = true;
         currentSpeedKmh = parseFloat(p[7]) * 1.852;
         if (currentSpeedKmh > maxSpeedInLap) maxSpeedInLap = Math.round(currentSpeedKmh);
     }
-
     if (line.includes('GGA') && (p[6] !== '0' && p[6] !== '')) {
         fix = true;
-        const cur = { 
-            lat: dmmToDec(p[2], p[3]), 
-            lon: dmmToDec(p[4], p[5]), 
-            rpm: currentRPM || 0, 
-            speed: currentSpeedKmh || 0, 
-            time: Date.now() 
-        };
-
+        const cur = { lat: dmmToDec(p[2], p[3]), lon: dmmToDec(p[4], p[5]), rpm: currentRPM || 0, speed: currentSpeedKmh || 0, time: Date.now() };
         if (swState === 1 && lastPos) {
             gpsPoints.push(cur);
-
-            // --- コントロールライン判定 (方向記憶) ---
             const hitSL = getIntersection(lastPos, cur, lines.startLine);
             if (hitSL) {
-                // 初回通過時に方向を記憶
                 if (validDirection === null) validDirection = hitSL.dir;
-                
-                // 記憶した方向と一致する場合のみ計測
                 if (hitSL.dir === validDirection && (hitSL.time - (lapStartTime || startTime) > cooldownMs)) {
                     processLap(hitSL.time);
                 }
             }
-
-            // --- セクター判定 (S1〜S3個別に方向記憶) ---
             if (lapStartTime > 0) {
-                ['s1', 's2', 's3'].forEach((s, index) => {
-                    const sectorNum = index + 1;
+                ['s1', 's2', 's3'].forEach(s => {
                     const hit = getIntersection(lastPos, cur, lines[s + 'Line']);
-                    
                     if (hit) {
-                        // 各セクターごとに初めて通過した向きを個別に記憶
                         if (sectorDirections[s] === null) sectorDirections[s] = hit.dir;
-
-                        // 記憶した方向と一致し、かつ現在のラップ内で未通過の場合のみ計測
                         if (hit.dir === sectorDirections[s]) {
-                            const sectorAbsTime = (hit.time - lapStartTime) / 1000;
-                            const sectorRelTime = sectorAbsTime - lastPassedSectorTime;
-
-                            const valElement = document.getElementById(`s${sectorNum}_val`);
-                            if (valElement) {
-                                valElement.textContent = sectorRelTime.toFixed(3);
+                            const absTime = (hit.time - lapStartTime) / 1000;
+                            if (s === 's1' && s1_abs === 0) {
+                                s1_abs = absTime; lastPassedSectorTime = absTime;
+                                document.getElementById('s1_val').textContent = s1_abs.toFixed(3);
+                            } else if (s === 's2' && s2_abs === 0) {
+                                s2_abs = absTime; lastPassedSectorTime = absTime;
+                                document.getElementById('s2_val').textContent = (s1_abs > 0 ? (s2_abs - s1_abs) : s2_abs).toFixed(3);
+                            } else if (s === 's3' && s3_abs === 0) {
+                                s3_abs = absTime; lastPassedSectorTime = absTime;
+                                document.getElementById('s3_val').textContent = (s2_abs > 0 ? (s3_abs - s2_abs) : s3_abs).toFixed(3);
                             }
-                            lastPassedSectorTime = sectorAbsTime;
                         }
                     }
                 });
@@ -305,53 +265,17 @@ function parseNMEA(line) {
     btn.style.background = fix ? "var(--hrc-red)" : "var(--hrc-orange)";
     btn.style.color = fix ? "#fff" : "#000";
 }
+
 function processLap(hitTime) {
-    const now = Date.now();
-    
-    // クールダウンチェック（30秒は長すぎる可能性があるため、cooldownMs変数を使用）
-    if (lapStartTime && (hitTime - lapStartTime < cooldownMs)) return; 
-
-    if (lapStartTime) {
-        const lapTimeMs = hitTime - lapStartTime;
-        const lapTimeSec = (lapTimeMs / 1000).toFixed(3);
-        
-        // 履歴保存用のオブジェクト作成
-        const lapData = { 
-            no: lapRecords.length + 1, 
-            time: lapTimeMs, 
-            max: Math.round(maxSpeedInLap), 
-            maxRpm: Math.round(maxRpmInLap),
-            s1: document.getElementById('s1_val').textContent, 
-            s2: document.getElementById('s2_val').textContent, 
-            s3: document.getElementById('s3_val').textContent, 
-            s4: lastPassedSectorTime > 0 ? ((lapTimeMs/1000) - lastPassedSectorTime).toFixed(3) : "--.---" 
-        };
-        
-        lapRecords.unshift(lapData);
-        updateLapList();
-
-        // ★V12ロジック：15秒間表示を固定する
-        isFrozen = true;
-        freezeUntil = now + 15000; // 15秒間
-        freezeDisplayTime = timeFormat(lapTimeMs);
-
-        // ベストラップ判定
-        if (bestLapTime === null || parseFloat(lapTimeSec) < bestLapTime) {
-            bestLapTime = parseFloat(lapTimeSec);
-        }
-    }
-
-    // 次のラップへの準備
-    lapStartTime = hitTime; 
-    maxSpeedInLap = 0; 
-    maxRpmInLap = 0; 
-    lastPassedSectorTime = 0;
-    
-    // セクター表示のリセット
-    ['s1_val', 's2_val', 's3_val'].forEach(id => {
-        const el = document.getElementById(id);
-        if(el) el.textContent = "--.---";
-    });
+    const lapTimeMs = hitTime - (lapStartTime || startTime);
+    const lapTimeSec = lapTimeMs / 1000;
+    let s4 = lastPassedSectorTime > 0 ? (lapTimeSec - lastPassedSectorTime).toFixed(3) : "--.---";
+    const lapData = { no: lapRecords.length + 1, time: lapTimeMs, max: Math.round(maxSpeedInLap), maxRpm: Math.round(maxRpmInLap), s1: document.getElementById('s1_val').textContent, s2: document.getElementById('s2_val').textContent, s3: document.getElementById('s3_val').textContent, s4: s4 };
+    lapRecords.unshift(lapData);
+    updateLapList();
+    isFrozen = true; freezeDisplayTime = timeFormat(lapTimeMs); freezeUntil = Date.now() + 15000;
+    lapStartTime = hitTime; maxSpeedInLap = 0; maxRpmInLap = 0; s1_abs = 0; s2_abs = 0; s3_abs = 0; lastPassedSectorTime = 0;
+    setTimeout(() => { if(swState === 1) { ['s1_val','s2_val','s3_val'].forEach(id => { document.getElementById(id).textContent = "--.---"; }); } }, 3000);
 }
 
 function updateLapList() {
@@ -362,28 +286,19 @@ function updateLapList() {
 
 function mainLoop() {
     const now = Date.now();
-    
-    // ★追記：表示値を目標値へ20%ずつ近づける（滑らかアニメーション）
-    displayedRPM += (targetRPM - displayedRPM) * 0.2; 
-
     if (swState === 1) {
-        // 最高回転数の判定は、補完前の「targetRPM」で行うのが正確
-        if (targetRPM > maxRpmInLap) maxRpmInLap = Math.round(targetRPM);
-        
+        if (currentRPM > maxRpmInLap) maxRpmInLap = Math.round(currentRPM);
         document.getElementById('display').textContent = "TOTAL " + timeFormat(now - startTime);
         document.getElementById('display1').textContent = (isFrozen && now < freezeUntil) ? freezeDisplayTime : timeFormat(now - (lapStartTime || startTime));
     }
-    
-    // ★修正：描画には補完した「displayedRPM」を渡す
-    drawTacho(displayedRPM);
-    
+    drawTacho(currentRPM);
     requestAnimationFrame(mainLoop);
 }
 
 function drawTacho(rpm) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const w = canvas.width, h = canvas.height, segments = 75;
-    
+
     // 現在の回転数が全75セグメント中、どこまで到達しているか (0〜75)
     const activeThreshold = (rpm / 14000) * segments; 
 
@@ -405,7 +320,7 @@ function drawTacho(rpm) {
         // 現在のインデックス i が、現在の回転数(activeThreshold)より下なら色を塗る
         if (i < activeThreshold) {
             const currentSegmentRpm = (i / segments) * 14000;
-            
+
             if (currentSegmentRpm >= 10500) {
                 color = "#E4002B"; // HRC Red (直接指定)
             } else if (currentSegmentRpm >= 6000) {
@@ -444,64 +359,16 @@ function drawTacho(rpm) {
 
 document.getElementById('lapBtn').onclick = function() {
     if (swState === 1) {
-        const hitTime = Date.now(); 
-        const lapTimeMs = hitTime - (lapStartTime || startTime);
-        
-        // --- 履歴用データ作成 ---
-        const lapData = { 
-            no: lapRecords.length + 1, 
-            time: lapTimeMs, 
-            max: Math.round(maxSpeedInLap), 
-            maxRpm: Math.round(maxRpmInLap),
-            s1: document.getElementById('s1_val').textContent, 
-            s2: document.getElementById('s2_val').textContent, 
-            s3: document.getElementById('s3_val').textContent, 
-            s4: lastPassedSectorTime > 0 ? ((lapTimeMs/1000) - lastPassedSectorTime).toFixed(3) : "--.---" 
-        };
-        
-        lapRecords.unshift(lapData); 
-        updateLapList();
-        
-        // ★重要：ここには「isFrozen = true」を書かない！
-        // これにより、手動ラップ時は即座に次の計測表示に戻ります。
-
-        // ラップ終了後のリセット処理
-        lapStartTime = hitTime; 
-        maxSpeedInLap = 0; 
-        maxRpmInLap = 0; 
-        lastPassedSectorTime = 0;
-        
-        // セクター表示のリセット
-        ['s1_val', 's2_val', 's3_val'].forEach(id => {
-            const el = document.getElementById(id);
-            if(el) el.textContent = "--.---";
-        });
-
-    } else if (confirm("リセットしてリロードしますか？")) { 
-        location.reload(); 
-    }
+        const hitTime = Date.now(); const lapTimeMs = hitTime - (lapStartTime || startTime);
+        const lapData = { no: lapRecords.length + 1, time: lapTimeMs, max: Math.round(maxSpeedInLap), maxRpm: Math.round(maxRpmInLap), s1: document.getElementById('s1_val').textContent, s2: document.getElementById('s2_val').textContent, s3: document.getElementById('s3_val').textContent, s4: lastPassedSectorTime > 0 ? ((lapTimeMs/1000) - lastPassedSectorTime).toFixed(3) : "--.---" };
+        lapRecords.unshift(lapData); updateLapList();
+        lapStartTime = hitTime; maxSpeedInLap = 0; maxRpmInLap = 0; s1_abs = 0; s2_abs = 0; s3_abs = 0; lastPassedSectorTime = 0;
+    } else if (confirm("リセットしてリロードしますか？")) { location.reload(); }
 };
 
 document.getElementById('startBtn').onclick = function() {
-    if (swState !== 1) { 
-        swState = 1; 
-        startTime = Date.now(); 
-        lapStartTime = 0; 
-        lapRecords = []; 
-        gpsPoints = []; 
-        
-        // --- 記憶の初期化 ---
-        validDirection = null; 
-        sectorDirections = { s1: null, s2: null, s3: null }; // セクター方向をリセット
-        
-        this.classList.add('active'); 
-        document.getElementById('gpxBtn').style.display = 'none'; 
-    }
-    else { 
-        swState = 2; 
-        this.classList.remove('active'); 
-        document.getElementById('gpxBtn').style.display = 'block'; 
-    }
+    if (swState !== 1) { swState = 1; startTime = Date.now(); lapStartTime = 0; lapRecords = []; gpsPoints = []; validDirection = null; this.classList.add('active'); document.getElementById('gpxBtn').style.display = 'none'; }
+    else { swState = 2; this.classList.remove('active'); document.getElementById('gpxBtn').style.display = 'block'; }
 };
 
 document.getElementById('usbGpsBtn').onclick = async function() {
@@ -525,6 +392,7 @@ document.getElementById('historyBtn').onclick = function() {
 document.getElementById('gpxBtn').onclick = () => {
     if (gpsPoints.length === 0) return;
 
+    // ライン情報の取得（MAP等との連携用）
     // localStorageからライン情報を取得（MAPとの共有用）
     const getL = (k) => { 
         const p1Lat = localStorage.getItem(k + 'P1Lat'); 
@@ -532,9 +400,11 @@ document.getElementById('gpxBtn').onclick = () => {
         return `${p1Lat},${localStorage.getItem(k + 'P1Lon')},${localStorage.getItem(k + 'P2Lat')},${localStorage.getItem(k + 'P2Lon')}`; 
     };
     const lineData = `SL:${getL('startLine')}|S1:${getL('s1Line')}|S2:${getL('s2Line')}|S3:${getL('s3Line')}`;
-    
+
+    // GPXヘッダー：標準的な定義のみ
     // GPXヘッダー：Garminの拡張スキーマ(v1)を定義してRPMを格納できるようにする
     let gpx = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="KLAP_DEGI" xmlns="http://www.topografix.com/GPX/1/1">
 <gpx version="1.1" creator="KLAP_DEGI" 
   xmlns="http://www.topografix.com/GPX/1/1"
   xmlns:v1="http://www.garmin.com/xmlschemas/TrackPointExtension/v1">
@@ -546,12 +416,14 @@ document.getElementById('gpxBtn').onclick = () => {
     <name>RaceLog_${new Date().toLocaleString()}</name>
     <trkseg>`;
 
+    // ポイントの書き出し（時刻を「今日」に、速度のみを記録）
     // 各計測ポイントの書き出し
     gpsPoints.forEach(p => {
+        const timeISO = new Date(p.time).toISOString(); // 1970年や2000年ではなく「今日」
         const timeISO = new Date(p.time).toISOString();
         const speedMS = (p.speed / 3.6).toFixed(2);
         const rpmVal = Math.round(p.rpm || 0);
-        
+
         gpx += `
       <trkpt lat="${p.lat}" lon="${p.lon}">
         <time>${timeISO}</time>
@@ -569,15 +441,17 @@ document.getElementById('gpxBtn').onclick = () => {
   </trk>
 </gpx>`;
 
+    // 保存処理
     // Blobを作成してダウンロード実行
     const blob = new Blob([gpx], { type: 'application/gpx+xml' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     const now = new Date();
+    // ファイル名を「年月日_時分」にして管理しやすく
     
     // ファイル名：RaceLog_20240412_1830.gpx のような形式
     const fileName = `RaceLog_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}.gpx`;
-    
+
     a.href = url;
     a.download = fileName;
     document.body.appendChild(a);
@@ -600,7 +474,7 @@ if ('serviceWorker' in navigator) {
     });
   }
 
-    
+
 </script>
 </body>
 </html>
