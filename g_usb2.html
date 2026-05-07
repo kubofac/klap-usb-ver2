@@ -112,6 +112,7 @@ let pulsePerRev = 1, cooldownMs = 30000, validDirection = null;
 let s1_abs = 0, s2_abs = 0, s3_abs = 0, lastPassedSectorTime = 0;
 let sectorDirections = { s1: null, s2: null, s3: null };
 let lastValidRPM = 0;    
+let lastTempUpdateTime = 0;
 const canvas = document.getElementById('canvas'), ctx = canvas.getContext('2d');
 function parseNmeaTime(timeStr) {
     if (!timeStr || timeStr.length < 6) return Date.now();
@@ -155,8 +156,12 @@ characteristic.oncharacteristicvaluechanged = (e) => {
         // ノイズの場合は前回値を維持する、あるいは何もしない
     }
     
+  const now = Date.now();
+if (now - lastTempUpdateTime > 1000) { // 1000ms = 1秒
     currentTemp = data.getUint8(2);
     document.getElementById('temp_val').textContent = currentTemp;
+    lastTempUpdateTime = now;
+}
 };
 
         // イベントリスナーの重複登録防止
