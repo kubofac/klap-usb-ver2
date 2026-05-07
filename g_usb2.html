@@ -147,7 +147,7 @@ characteristic.oncharacteristicvaluechanged = (e) => {
     // --- 簡易ノイズフィルター ---
     // 1. 20,000rpm以上の異常値は無視
     // 2. 前回値から一気に10,000rpm以上跳ね上がった場合はノイズとみなす
-    if (rawRPM < 18000 && (lastValidRPM === 0 || Math.abs(rawRPM - lastValidRPM) < 5000)) {
+    if (rawRPM < 18000 && (lastValidRPM === 0 || Math.abs(rawRPM - lastValidRPM) < 3000)) {
         currentRPM = rawRPM;
         lastValidRPM = rawRPM;
     } else {
