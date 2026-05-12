@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>KLAP_DEGI_USB - V10.6.4_Turbo</title>
+    <title>KLAP_DEGI_USB - V10.6.5_Turbo</title>
     <style>
+         /* histoyに手動でも表示する */
         :root { --hrc-red: #E4002B; --hrc-white: #ffffff; --bg-dark: #000000; --hrc-orange: #FFA500; --hrc-blue: #004098; }
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: var(--bg-dark); color: var(--hrc-white); font-family: 'Arial Black', sans-serif; overflow: hidden; }
         #dashboard { position: relative; display: flex; flex-direction: column; height: 100dvh; width: 100vw; }
@@ -335,15 +336,55 @@ function parseNMEA(line) {
 }
 
 function processLap(hitTime) {
-    const lapTimeMs = hitTime - (lapStartTime || startTime);
+    // 1. ラップタイムの計算
+    // lapStartTimeが0（計測開始直後）の場合は、走行開始ボタンを押した時刻（startTime）との差分を1周目とする
+    const currentLapStartTime = lapStartTime || startTime;
+    const lapTimeMs = hitTime - currentLapStartTime;
     const lapTimeSec = lapTimeMs / 1000;
+
+    // 2. S4（最終セクター）の計算
+    // 最後にセクターラインを通過した時刻から、ラップ確定（ライン通過orボタン押し）までの時間を計算
     let s4 = lastPassedSectorTime > 0 ? (lapTimeSec - lastPassedSectorTime).toFixed(3) : "--.---";
-    const lapData = { no: lapRecords.length + 1, time: lapTimeMs, max: Math.round(maxSpeedInLap), maxRpm: Math.round(maxRpmInLap), s1: document.getElementById('s1_val').textContent, s2: document.getElementById('s2_val').textContent, s3: document.getElementById('s3_val').textContent, s4: s4 };
+    
+    // 3. Historyに保存するデータの作成
+    // 画面上のセクター表示（s1_val等）から現在の値をそのまま読み取って保存
+    const lapData = { 
+        no: lapRecords.length + 1, 
+        time: lapTimeMs, 
+        max: Math.round(maxSpeedInLap), 
+        maxRpm: Math.round(maxRpmInLap), 
+        s1: document.getElementById('s1_val').textContent, 
+        s2: document.getElementById('s2_val').textContent, 
+        s3: document.getElementById('s3_val').textContent, 
+        s4: s4 
+    };
+
+    // 4. 各種データの更新とリセット
     lapRecords.unshift(lapData);
     updateLapList();
-    isFrozen = true; freezeDisplayTime = timeFormat(lapTimeMs); freezeUntil = Date.now() + 15000;
-    lapStartTime = hitTime; maxSpeedInLap = 0; maxRpmInLap = 0; s1_abs = 0; s2_abs = 0; s3_abs = 0; lastPassedSectorTime = 0;
-    setTimeout(() => { if(swState === 1) { ['s1_val','s2_val','s3_val'].forEach(id => { document.getElementById(id).textContent = "--.---"; }); } }, 3000);
+
+    // ラップ通過時の画面フリーズ（15秒間表示固定）
+    isFrozen = true; 
+    freezeDisplayTime = timeFormat(lapTimeMs); 
+    freezeUntil = Date.now() + 15000;
+
+    // 次のラップのための変数リセット
+    lapStartTime = hitTime; 
+    maxSpeedInLap = 0; 
+    maxRpmInLap = 0; 
+    s1_abs = 0; 
+    s2_abs = 0; 
+    s3_abs = 0; 
+    lastPassedSectorTime = 0;
+
+    // 3秒後にセクター表示のみ「--.---」に戻す（次の通過を待つため）
+    setTimeout(() => { 
+        if(swState === 1) { 
+            ['s1_val','s2_val','s3_val'].forEach(id => { 
+                document.getElementById(id).textContent = "--.---"; 
+            }); 
+        } 
+    }, 3000);
 }
 
 function updateLapList() {
@@ -427,11 +468,16 @@ function drawTacho(rpm) {
 
 document.getElementById('lapBtn').onclick = function() {
     if (swState === 1) {
-        const hitTime = Date.now(); const lapTimeMs = hitTime - (lapStartTime || startTime);
-        const lapData = { no: lapRecords.length + 1, time: lapTimeMs, max: Math.round(maxSpeedInLap), maxRpm: Math.round(maxRpmInLap), s1: document.getElementById('s1_val').textContent, s2: document.getElementById('s2_val').textContent, s3: document.getElementById('s3_val').textContent, s4: lastPassedSectorTime > 0 ? ((lapTimeMs/1000) - lastPassedSectorTime).toFixed(3) : "--.---" };
-        lapRecords.unshift(lapData); updateLapList();
-        lapStartTime = hitTime; maxSpeedInLap = 0; maxRpmInLap = 0; s1_abs = 0; s2_abs = 0; s3_abs = 0; lastPassedSectorTime = 0;
-    } else if (confirm("リセットしてリロードしますか？")) { location.reload(); }
+        // 現在の精密時刻（GPS時刻があれば優先、なければシステム時刻）を取得
+        const hitTime = (lastPos && lastPos.time) ? lastPos.time : Date.now();
+        
+        // 自動ラップと同じ関数を呼び出すことで、セクター判定や履歴保存を一本化
+        processLap(hitTime); 
+        
+        console.log("Manual Lap Triggered at: " + hitTime);
+    } else if (confirm("リセットしてリロードしますか？")) { 
+        location.reload(); 
+    }
 };
 
 document.getElementById('startBtn').onclick = function() {
