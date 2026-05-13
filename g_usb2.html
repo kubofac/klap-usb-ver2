@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>KLAP_DEGI_USB - V10.6.5_Turbo</title>
+    <title>KLAP_DEGI_USB - V10.6.6_Turbo</title>
     <style>
-         /* histoyに手動でも表示する */
+         /* histoyに手動でも表示する、historyのｓが残る修正 */
         :root { --hrc-red: #E4002B; --hrc-white: #ffffff; --bg-dark: #000000; --hrc-orange: #FFA500; --hrc-blue: #004098; }
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: var(--bg-dark); color: var(--hrc-white); font-family: 'Arial Black', sans-serif; overflow: hidden; }
         #dashboard { position: relative; display: flex; flex-direction: column; height: 100dvh; width: 100vw; }
@@ -337,17 +337,15 @@ function parseNMEA(line) {
 
 function processLap(hitTime) {
     // 1. ラップタイムの計算
-    // lapStartTimeが0（計測開始直後）の場合は、走行開始ボタンを押した時刻（startTime）との差分を1周目とする
     const currentLapStartTime = lapStartTime || startTime;
     const lapTimeMs = hitTime - currentLapStartTime;
     const lapTimeSec = lapTimeMs / 1000;
 
     // 2. S4（最終セクター）の計算
-    // 最後にセクターラインを通過した時刻から、ラップ確定（ライン通過orボタン押し）までの時間を計算
     let s4 = lastPassedSectorTime > 0 ? (lapTimeSec - lastPassedSectorTime).toFixed(3) : "--.---";
     
     // 3. Historyに保存するデータの作成
-    // 画面上のセクター表示（s1_val等）から現在の値をそのまま読み取って保存
+    // 保存は「関数が呼ばれた瞬間」の画面表示を使うので、通過済みなら数値、未通過なら--.---が保存されます
     const lapData = { 
         no: lapRecords.length + 1, 
         time: lapTimeMs, 
@@ -359,16 +357,18 @@ function processLap(hitTime) {
         s4: s4 
     };
 
-    // 4. 各種データの更新とリセット
+    // 4. Historyの更新
     lapRecords.unshift(lapData);
     updateLapList();
 
-    // ラップ通過時の画面フリーズ（15秒間表示固定）
+    // 5. 画面フリーズ（15秒間表示固定）の設定
     isFrozen = true; 
     freezeDisplayTime = timeFormat(lapTimeMs); 
     freezeUntil = Date.now() + 15000;
 
-    // 次のラップのための変数リセット
+    // 6. 【ここが最重要】内部変数のみ「即座に」リセット
+    // 画面（DOM）がフリーズしていても、内部の数値計算はここですぐにゼロに戻します。
+    // これにより、手動ボタンを連打しても「2回目」は内部が0なのでHistoryに数値が残りません。
     lapStartTime = hitTime; 
     maxSpeedInLap = 0; 
     maxRpmInLap = 0; 
@@ -377,14 +377,15 @@ function processLap(hitTime) {
     s3_abs = 0; 
     lastPassedSectorTime = 0;
 
-    // 3秒後にセクター表示のみ「--.---」に戻す（次の通過を待つため）
+    // 7. 【表示のリセット】フリーズ終了に合わせて画面も "--.---" に戻す
+    // 3000msだと15秒フリーズの途中で消えてしまうので、ここを15000msにします
     setTimeout(() => { 
         if(swState === 1) { 
             ['s1_val','s2_val','s3_val'].forEach(id => { 
                 document.getElementById(id).textContent = "--.---"; 
             }); 
         } 
-    }, 3000);
+    }, 15000); 
 }
 
 function updateLapList() {
