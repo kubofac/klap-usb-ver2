@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>KLAP_DEGI_USB - V10.6.6_Turbo</title>
+    <title>KLAP_DEGI_USB - V10.6.7_Turbo</title>
     <style>
-         /* histoyに手動でも表示する、historyのｓが残る修正 */
+         /* histoyに手動でも表示する、historyのｓが残る修正 、手動で15s修正*/
         :root { --hrc-red: #E4002B; --hrc-white: #ffffff; --bg-dark: #000000; --hrc-orange: #FFA500; --hrc-blue: #004098; }
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: var(--bg-dark); color: var(--hrc-white); font-family: 'Arial Black', sans-serif; overflow: hidden; }
         #dashboard { position: relative; display: flex; flex-direction: column; height: 100dvh; width: 100vw; }
@@ -335,7 +335,8 @@ function parseNMEA(line) {
     btn.style.color = fix ? "#fff" : "#000";
 }
 
-function processLap(hitTime) {
+// 引数に shouldFreeze を追加し、デフォルト値を true に設定
+function processLap(hitTime, shouldFreeze = true) {
     // 1. ラップタイムの計算
     const currentLapStartTime = lapStartTime || startTime;
     const lapTimeMs = hitTime - currentLapStartTime;
@@ -345,7 +346,6 @@ function processLap(hitTime) {
     let s4 = lastPassedSectorTime > 0 ? (lapTimeSec - lastPassedSectorTime).toFixed(3) : "--.---";
     
     // 3. Historyに保存するデータの作成
-    // 保存は「関数が呼ばれた瞬間」の画面表示を使うので、通過済みなら数値、未通過なら--.---が保存されます
     const lapData = { 
         no: lapRecords.length + 1, 
         time: lapTimeMs, 
@@ -357,18 +357,37 @@ function processLap(hitTime) {
         s4: s4 
     };
 
-    // 4. Historyの更新
+    // 4. History（履歴リスト）の更新
     lapRecords.unshift(lapData);
     updateLapList();
 
-    // 5. 画面フリーズ（15秒間表示固定）の設定
-    isFrozen = true; 
-    freezeDisplayTime = timeFormat(lapTimeMs); 
-    freezeUntil = Date.now() + 15000;
+    // 5. 画面表示の制御（フリーズ処理）
+    if (shouldFreeze) {
+        // --- 自動ラップ（ライン通過時）：15秒間表示を固定 ---
+        isFrozen = true; 
+        freezeDisplayTime = timeFormat(lapTimeMs); 
+        const currentFreezeTimestamp = Date.now() + 15000; // このフリーズの有効期限
+        freezeUntil = currentFreezeTimestamp;
 
-    // 6. 【ここが最重要】内部変数のみ「即座に」リセット
-    // 画面（DOM）がフリーズしていても、内部の数値計算はここですぐにゼロに戻します。
-    // これにより、手動ボタンを連打しても「2回目」は内部が0なのでHistoryに数値が残りません。
+        setTimeout(() => { 
+            // 15秒後、もし「次のラップのフリーズ」に上書きされていなければ表示をリセット
+            if(swState === 1 && freezeUntil === currentFreezeTimestamp) { 
+                ['s1_val','s2_val','s3_val'].forEach(id => { 
+                    document.getElementById(id).textContent = "--.---"; 
+                }); 
+            } 
+        }, 15000);
+    } else {
+        // --- 手動ラップ（ボタン押下時）：フリーズせず、表示を即座にリセット ---
+        isFrozen = false; 
+        freezeUntil = 0;
+        ['s1_val','s2_val','s3_val'].forEach(id => { 
+            document.getElementById(id).textContent = "--.---"; 
+        });
+        console.log("Manual Lap: Display reset immediately.");
+    }
+
+    // 6. 次のラップのための内部変数リセット（これは常に即座に行う）
     lapStartTime = hitTime; 
     maxSpeedInLap = 0; 
     maxRpmInLap = 0; 
@@ -376,16 +395,6 @@ function processLap(hitTime) {
     s2_abs = 0; 
     s3_abs = 0; 
     lastPassedSectorTime = 0;
-
-    // 7. 【表示のリセット】フリーズ終了に合わせて画面も "--.---" に戻す
-    // 3000msだと15秒フリーズの途中で消えてしまうので、ここを15000msにします
-    setTimeout(() => { 
-        if(swState === 1) { 
-            ['s1_val','s2_val','s3_val'].forEach(id => { 
-                document.getElementById(id).textContent = "--.---"; 
-            }); 
-        } 
-    }, 15000); 
 }
 
 function updateLapList() {
@@ -469,13 +478,12 @@ function drawTacho(rpm) {
 
 document.getElementById('lapBtn').onclick = function() {
     if (swState === 1) {
-        // 現在の精密時刻（GPS時刻があれば優先、なければシステム時刻）を取得
         const hitTime = (lastPos && lastPos.time) ? lastPos.time : Date.now();
         
-        // 自動ラップと同じ関数を呼び出すことで、セクター判定や履歴保存を一本化
-        processLap(hitTime); 
+        // 第2引数に false を渡して、フリーズ処理をスキップさせる
+        processLap(hitTime, false); 
         
-        console.log("Manual Lap Triggered at: " + hitTime);
+        console.log("Manual Lap Triggered (No Freeze)");
     } else if (confirm("リセットしてリロードしますか？")) { 
         location.reload(); 
     }
