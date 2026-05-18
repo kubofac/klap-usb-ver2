@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>KLAP_DEGI_USB - V10.6.7_Turbo</title>
     <style>
-         /* histoyに手動でも表示する、historyのｓが残る修正 、手動で15s修正*/
+         /* histoyに手動でも表示する、historyのｓが残る修正 、手動で15s修正、GPS抜けでボタンの色オレンジ*/
         :root { --hrc-red: #E4002B; --hrc-white: #ffffff; --bg-dark: #000000; --hrc-orange: #FFA500; --hrc-blue: #004098; }
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: var(--bg-dark); color: var(--hrc-white); font-family: 'Arial Black', sans-serif; overflow: hidden; }
         #dashboard { position: relative; display: flex; flex-direction: column; height: 100dvh; width: 100vw; }
@@ -114,6 +114,17 @@ let s1_abs = 0, s2_abs = 0, s3_abs = 0, lastPassedSectorTime = 0;
 let sectorDirections = { s1: null, s2: null, s3: null };
 let lastValidRPM = 0;    
 let lastTempUpdateTime = 0;
+
+let gpsWatchdogTimeout = null; // 途絶監視用のタイマー
+
+function resetGpsButtonVisual() {
+    const btn = document.getElementById('usbGpsBtn');
+    btn.style.background = "#1a1a1a"; // ボタン本来の背景色
+    btn.style.color = "#fff";          // ボタン本来の文字色
+}
+
+
+    
 const canvas = document.getElementById('canvas'), ctx = canvas.getContext('2d');
 function parseNmeaTime(timeStr) {
     if (!timeStr || timeStr.length < 6) return Date.now();
@@ -495,12 +506,40 @@ document.getElementById('startBtn').onclick = function() {
 };
 
 document.getElementById('usbGpsBtn').onclick = async function() {
+    const btn = this;
     try {
         device = await navigator.usb.requestDevice({ filters: [] });
-        await device.open(); await device.selectConfiguration(1);
+        await device.open(); 
+        await device.selectConfiguration(1);
         await device.claimInterface(parseInt(localStorage.getItem('usb_interface')) || 1);
-        while (device) { const res = await device.transferIn(parseInt(localStorage.getItem('usb_endpoint')) || 2, 512); const linesN = (nmeaBuffer + new TextDecoder().decode(res.data)).split(/\r?\n/); nmeaBuffer = linesN.pop(); linesN.forEach(parseNMEA); }
-    } catch (e) { console.error(e); }
+        
+        // 接続開始時はまずオレンジ（通信中・未測位）にする
+        btn.style.background = "var(--hrc-orange)";
+        btn.style.color = "#000";
+
+        while (device) { 
+            const res = await device.transferIn(parseInt(localStorage.getItem('usb_endpoint')) || 2, 512); 
+            const linesN = (nmeaBuffer + new TextDecoder().decode(res.data)).split(/\r?\n/); 
+            nmeaBuffer = linesN.pop(); 
+            
+            linesN.forEach(parseNMEA); 
+
+            // --- 途絶監視（ウォッチドッグ）ロジック ---
+            // データが届くたびにタイマーをリセット。2秒間データが途絶えたらオレンジ（警告）に戻す
+            clearTimeout(gpsWatchdogTimeout);
+            gpsWatchdogTimeout = setTimeout(() => {
+                console.warn("GPS data stream stalled.");
+                btn.style.background = "var(--hrc-orange)"; // 通信はあるがデータストップ時はオレンジ
+                btn.style.color = "#000";
+            }, 2000); 
+        }
+    } catch (e) { 
+        console.error("USB GPS Error or Disconnected:", e); 
+        // ケーブルが抜けた、openに失敗した等のエラー時は「初期状態の色」に戻す
+        clearTimeout(gpsWatchdogTimeout);
+        resetGpsButtonVisual();
+        device = null;
+    }
 };
 
 document.getElementById('historyBtn').onclick = function() {
