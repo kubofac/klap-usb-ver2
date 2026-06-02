@@ -354,8 +354,7 @@ function processLap(hitTime, shouldFreeze = true) {
     const lapTimeSec = lapTimeMs / 1000;
 
     // 2. S4（最終セクター）の計算
-    let s4 = lastPassedSectorTime > 0 ? (lapTimeSec - lastPassedSectorTime).toFixed(3) : "--.---";
-    
+   let s4 = lastPassedSectorTime > 0 ? (lapTimeSec - lastPassedSectorTime).toFixed(3) : "--.---";
     // 3. Historyに保存するデータの作成
     const lapData = { 
         no: lapRecords.length + 1, 
@@ -505,40 +504,80 @@ document.getElementById('startBtn').onclick = function() {
     else { swState = 2; this.classList.remove('active'); document.getElementById('gpxBtn').style.display = 'block'; }
 };
 
+let isUsbLoopRunning = false;
+
+async function startUsbReadLoop() {
+    if (isUsbLoopRunning || !device) return;
+    isUsbLoopRunning = true;
+    
+    const btn = document.getElementById('usbGpsBtn');
+    const endpoint = parseInt(localStorage.getItem('usb_endpoint')) || 2;
+
+    try {
+        while (device && device.opened) {
+            const res = await device.transferIn(endpoint, 512);
+            if (res.data && res.data.byteLength > 0) {
+                const linesN = (nmeaBuffer + new TextDecoder().decode(res.data)).split(/\r?\n/);
+                nmeaBuffer = linesN.pop();
+                linesN.forEach(parseNMEA);
+
+                clearTimeout(gpsWatchdogTimeout);
+                gpsWatchdogTimeout = setTimeout(() => {
+                    console.warn("GPSデータが途絶しました。");
+                    btn.style.background = "var(--hrc-orange)";
+                    btn.style.color = "#000";
+                }, 2000);
+            }
+        }
+    } catch (e) {
+        console.error("USBループエラー:", e);
+    } finally {
+        isUsbLoopRunning = false;
+        if (device && device.opened) {
+            setTimeout(startUsbReadLoop, 100);
+        }
+    }
+}
+
+// 物理的な抜き差し監視
+navigator.usb.addEventListener('disconnect', (event) => {
+    if (device && event.device === device) {
+        clearTimeout(gpsWatchdogTimeout);
+        resetGpsButtonVisual();
+        device = null;
+        isUsbLoopRunning = false;
+    }
+});
+
+// ボタン押下時の処理
 document.getElementById('usbGpsBtn').onclick = async function() {
     const btn = this;
     try {
+        if (device && device.opened) {
+            clearTimeout(gpsWatchdogTimeout);
+            isUsbLoopRunning = false;
+            await device.close();
+            device = null;
+            resetGpsButtonVisual();
+            return;
+        }
+
         device = await navigator.usb.requestDevice({ filters: [] });
         await device.open(); 
         await device.selectConfiguration(1);
         await device.claimInterface(parseInt(localStorage.getItem('usb_interface')) || 1);
         
-        // 接続開始時はまずオレンジ（通信中・未測位）にする
         btn.style.background = "var(--hrc-orange)";
         btn.style.color = "#000";
 
-        while (device) { 
-            const res = await device.transferIn(parseInt(localStorage.getItem('usb_endpoint')) || 2, 512); 
-            const linesN = (nmeaBuffer + new TextDecoder().decode(res.data)).split(/\r?\n/); 
-            nmeaBuffer = linesN.pop(); 
-            
-            linesN.forEach(parseNMEA); 
+        startUsbReadLoop();
 
-            // --- 途絶監視（ウォッチドッグ）ロジック ---
-            // データが届くたびにタイマーをリセット。2秒間データが途絶えたらオレンジ（警告）に戻す
-            clearTimeout(gpsWatchdogTimeout);
-            gpsWatchdogTimeout = setTimeout(() => {
-                console.warn("GPS data stream stalled.");
-                btn.style.background = "var(--hrc-orange)"; // 通信はあるがデータストップ時はオレンジ
-                btn.style.color = "#000";
-            }, 2000); 
-        }
     } catch (e) { 
-        console.error("USB GPS Error or Disconnected:", e); 
-        // ケーブルが抜けた、openに失敗した等のエラー時は「初期状態の色」に戻す
+        console.error("USB接続エラー:", e); 
         clearTimeout(gpsWatchdogTimeout);
         resetGpsButtonVisual();
         device = null;
+        isUsbLoopRunning = false;
     }
 };
 
