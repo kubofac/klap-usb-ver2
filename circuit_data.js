@@ -1,10 +1,20 @@
-// circuit_data.js
+// circuit_data.js セクター対応版
 const circuitData = {
     "0": {
         name: "白糸S",
         startLineP1: [138.622532514261, 35.3081896115975],
-        startLineP2: [138.622637774426, 35.3080490509764]
-    },
+        startLineP2: [138.622637774426, 35.3080490509764],
+        // セクター1
+        s1LineP1: [138.622164, 35.308807], 
+        s1LineP2: [138.622118, 35.308938],
+        // セクター2
+        s2LineP1: [138.621994, 35.308256], 
+        s2LineP2: [138.621974, 35.308074],
+        // セクター3
+        s3LineP1: [138.621389, 35.308319], 
+        s3LineP2: [138.621571, 35.308192]
+    }, // 白糸Sのデータはここで初めて閉じます
+
     "1": {
         name: "富士C",
         startLineP1: [138.93342054530245, 35.36915226810625],
@@ -22,19 +32,26 @@ const circuitData = {
     }
 };
 
-function loadCircuitStartLineFromData(circuitId) {
-    if (circuitData[circuitId]) {
-        const data = circuitData[circuitId];
-        document.getElementById('startLineP1Lon').value = data.startLineP1[0];
-        document.getElementById('startLineP1Lat').value = data.startLineP1[1];
-        document.getElementById('startLineP2Lon').value = data.startLineP2[0];
-        document.getElementById('startLineP2Lat').value = data.startLineP2[1];
-        return { p1: data.startLineP1, p2: data.startLineP2 };
-    } else {
-        document.getElementById('startLineP1Lon').value = '';
-        document.getElementById('startLineP1Lat').value = '';
-        document.getElementById('startLineP2Lon').value = '';
-        document.getElementById('startLineP2Lat').value = '';
-        return { p1: [0, 0], p2: [0, 0] };
-    }
+// HTML側の設計（localStorage + drawSavedLines）に合わせた読み込み関数
+function loadCircuitLinesToStorage(circuitId) {
+    if (!circuitData[circuitId]) return null;
+    
+    const data = circuitData[circuitId];
+    const targets = ['startLine', 's1Line', 's2Line', 's3Line'];
+    
+    targets.forEach(t => {
+        if (data[t + 'P1'] && data[t + 'P2']) {
+            localStorage.setItem(t + 'P1Lat', data[t + 'P1'][1]);
+            localStorage.setItem(t + 'P1Lon', data[t + 'P1'][0]);
+            localStorage.setItem(t + 'P2Lat', data[t + 'P2'][1]);
+            localStorage.setItem(t + 'P2Lon', data[t + 'P2'][0]);
+        } else {
+            localStorage.removeItem(t + 'P1Lat');
+            localStorage.removeItem(t + 'P1Lon');
+            localStorage.removeItem(t + 'P2Lat');
+            localStorage.removeItem(t + 'P2Lon');
+        }
+    });
+    
+    return data;
 }
